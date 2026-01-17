@@ -1,0 +1,69 @@
+{
+  "_comment": "AI prompt library configuration",
+  "schema_version": "1.0.0",
+  "prompts": {
+    "narrator_main": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.8,
+      "max_tokens": 1024
+    },
+    "narrator_consequence": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.7,
+      "max_tokens": 512
+    },
+    "npc_decision": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "temperature": 0.7,
+      "max_tokens": 256
+    },
+    "npc_dialogue": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "temperature": 0.8,
+      "max_tokens": 512
+    },
+    "world_event": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "temperature": 0.6,
+      "max_tokens": 384
+    },
+    "oracle_v1": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.3,
+      "max_tokens": 256
+    },
+    "oracle_v2": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.5,
+      "max_tokens": 384
+    },
+    "oracle_v3": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.7,
+      "max_tokens": 512
+    },
+    "ending_narration": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "temperature": 0.9,
+      "max_tokens": 2048
+    }
+  }
+}

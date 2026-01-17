@@ -1,0 +1,60 @@
+{
+  "_version": "1.0.0",
+  "variables": [
+    {
+      "variable_path": "world.resources.oxygen_level.current",
+      "display_name": "Oxygen Level",
+      "initial_value": 85.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 25.0,
+      "decay_rate": 1.2,
+      "decay_condition": "world.ship_systems.life_support_efficiency.operational"
+    },
+    {
+      "variable_path": "world.resources.fuel_reserves.current",
+      "display_name": "Fuel Reserves",
+      "initial_value": 60.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 15.0,
+      "decay_rate": 0.8
+    },
+    {
+      "variable_path": "world.resources.power_level.current",
+      "display_name": "Power Level",
+      "initial_value": 75.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 20.0,
+      "decay_rate": 1.0
+    },
+    {
+      "variable_path": "world.resources.medical_supplies.current",
+      "display_name": "Medical Supplies",
+      "initial_value": 50.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 15.0,
+      "decay_rate": 0.0
+    },
+    {
+      "variable_path": "world.resources.food_water.current",
+      "display_name": "Food & Water",
+      "initial_value": 70.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 20.0,
+      "decay_rate": 0.9
+    },
+    {
+      "variable_path": "world.resources.repair_materials.current",
+      "display_name": "Repair Materials",
+      "initial_value": 40.0,
+      "min_value": 0.0,
+      "max_value": 100.0,
+      "critical_threshold": 10.0,
+      "decay_rate": 0.0
+    }
+  ]
+}

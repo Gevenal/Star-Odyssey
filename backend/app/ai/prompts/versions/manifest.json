@@ -1,0 +1,83 @@
+{
+  "_comment": "AI prompt version manifest and compatibility tracking",
+  "schema_version": "1.0.0",
+  "prompts": {
+    "narrator_main": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "Main narrator prompt for action processing",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "narrator_consequence": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "Consequence generation prompt",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "npc_decision": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "description": "NPC autonomous decision making",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "npc_dialogue": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "description": "NPC dialogue generation",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "oracle_v1": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "ORACLE v1 - Robotic/Protocol-bound persona",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "oracle_v2": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "ORACLE v2 - Curious/Questioning persona",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "oracle_v3": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "ORACLE v3 - Fully Awakened persona",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "world_event": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-1.5-flash",
+      "description": "World event generation",
+      "created": "2024-01-16",
+      "active": true
+    },
+    "ending_narration": {
+      "version": "1.0.0",
+      "compatible_state_versions": ["^1.0"],
+      "model": "gemini-pro",
+      "description": "Game ending narration",
+      "created": "2024-01-16",
+      "active": true
+    }
+  },
+  "versioning_notes": {
+    "compatible_state_versions": "Semver pattern - ^1.0 matches 1.x.x",
+    "model_selection": "pro for complex narration, flash for quick NPC decisions",
+    "migration_guide": "When updating prompts, increment version and test compatibility"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "_comment": "Random event templates - TODO: Expand event library",
+  "_version": "1.0.0",
+  "events": [
+    {
+      "id": "event_oxygen_leak",
+      "name": "Oxygen Leak Detected",
+      "category": "crisis",
+      "description": "ORACLE's voice cuts through the silence: 'ALERT: Oxygen leak detected in {location}. Atmospheric pressure dropping at {rate} percent per minute.'",
+      "trigger_conditions": {
+        "min_turn": 5,
+        "max_turn": 60
+      },
+      "player_choices": [
+        {
+          "id": "seal_immediately",
+          "text": "Seal the affected section immediately",
+          "outcomes": ["Stop leak quickly", "May trap crew inside"]
+        },
+        {
+          "id": "evacuate_first",
+          "text": "Evacuate crew before sealing",
+          "outcomes": ["Save crew", "Lose more oxygen"]
+        }
+      ],
+      "affected_npcs": ["npc_engineer"],
+      "probability": 0.3,
+      "one_time": true
+    },
+    {
+      "id": "event_power_surge",
+      "name": "Power Surge",
+      "category": "crisis",
+      "description": "The lights flicker and systems whine as a power surge courses through the ship's electrical grid.",
+      "trigger_conditions": {
+        "min_turn": 10,
+        "max_turn": 50
+      },
+      "player_choices": null,
+      "affected_npcs": [],
+      "probability": 0.4,
+      "one_time": false
+    },
+    {
+      "id": "event_npc_breakdown",
+      "name": "Crew Member Breaking Down",
+      "category": "character",
+      "description": "You find {npc_name} in {location}, clearly struggling under the weight of stress and fear.",
+      "trigger_conditions": {
+        "min_turn": 15,
+        "max_turn": 70,
+        "custom_condition": "any(npc.stress_level > 75 for npc in game_state.npcs.values())"
+      },
+      "player_choices": [
+        {
+          "id": "comfort_npc",
+          "text": "Take time to comfort them",
+          "outcomes": ["Reduce their stress", "Build trust", "Use valuable time"]
+        },
+        {
+          "id": "ignore_npc",
+          "text": "Leave them to deal with it alone",
+          "outcomes": ["Save time", "Damage relationship", "They may become unstable"]
+        }
+      ],
+      "affected_npcs": [],
+      "probability": 0.5,
+      "one_time": false
+    }
+  ]
+}

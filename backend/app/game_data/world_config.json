@@ -1,0 +1,115 @@
+{
+  "_comment": "World configuration for Odyssey-7 - Ship layout, locations, and core game settings",
+  "_version": "1.0.0",
+  "game_settings": {
+    "max_days": 7,
+    "turns_per_day": 12,
+    "hours_per_turn": 2,
+    "starting_location": "cryo_bay"
+  },
+  "victory_conditions": [
+    {
+      "id": "survive_7_days",
+      "name": "Survive 7 Days",
+      "description": "Survive until rescue arrives on day 7",
+      "check_expression": "game_state.world.day >= 7 and game_state.player.alive"
+    }
+  ],
+  "failure_conditions": [
+    {
+      "id": "player_death",
+      "name": "Player Death",
+      "description": "Player health reaches zero",
+      "check_expression": "game_state.player.health <= 0"
+    },
+    {
+      "id": "oxygen_depletion",
+      "name": "Oxygen Depletion",
+      "description": "Ship oxygen completely depleted",
+      "check_expression": "game_state.world.resources.oxygen_level.current <= 0"
+    }
+  ],
+  "locations": {
+    "cryo_bay": {
+      "name": "Cryo Bay",
+      "description": "Rows of cryo-pods line the walls, most empty. Emergency lights cast eerie blue shadows. The pod you woke from still hisses with residual coolant.",
+      "connected_to": ["crew_quarters", "med_bay"],
+      "facilities": ["cryo_pods", "emergency_release"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "command_bridge": {
+      "name": "Command Bridge",
+      "description": "The nerve center of Odyssey-7. Control stations glow with warning indicators. Viewport shows nothing but empty space and distant stars.",
+      "connected_to": ["crew_quarters", "observation_deck"],
+      "facilities": ["navigation_console", "communications_array", "emergency_beacon"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "engineering": {
+      "name": "Engineering Bay",
+      "description": "Massive reactor core dominates the space. Control panels flicker. The smell of ozone and burnt circuitry fills the air.",
+      "connected_to": ["reactor_room", "cargo_bay"],
+      "facilities": ["repair_station", "diagnostics_terminal", "tool_storage"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "reactor_room": {
+      "name": "Reactor Room",
+      "description": "The ship's nuclear heart beats with unstable energy. Temperature is elevated. Radiation warnings flash on every panel.",
+      "connected_to": ["engineering"],
+      "facilities": ["reactor_core", "cooling_system", "radiation_shielding"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "med_bay": {
+      "name": "Medical Bay",
+      "description": "Sterile white walls. Medical scanner humming. Supply cabinets partially depleted. An examination table sits empty.",
+      "connected_to": ["cryo_bay", "crew_quarters"],
+      "facilities": ["medical_scanner", "surgery_station", "medical_supplies"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "crew_quarters": {
+      "name": "Crew Quarters",
+      "description": "Personal bunks and lockers. Photos and personal effects scattered. Signs of hasty abandonment.",
+      "connected_to": ["command_bridge", "med_bay", "cryo_bay", "mess_hall"],
+      "facilities": ["personal_storage", "rest_area"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "mess_hall": {
+      "name": "Mess Hall",
+      "description": "Tables and chairs in disarray. Food synthesizer offline. Emergency rations visible in storage.",
+      "connected_to": ["crew_quarters", "cargo_bay"],
+      "facilities": ["food_synthesizer", "emergency_rations", "water_dispenser"],
+      "default_atmosphere": "normal",
+      "default_power": false,
+      "default_sealed": true
+    },
+    "cargo_bay": {
+      "name": "Cargo Bay",
+      "description": "Vast space filled with shipping containers and equipment. External airlock doors sealed. Some containers damaged.",
+      "connected_to": ["mess_hall", "engineering"],
+      "facilities": ["airlock", "cargo_containers", "loading_equipment"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    },
+    "observation_deck": {
+      "name": "Observation Deck",
+      "description": "Panoramic viewport showing the void of space. Comfortable seating area. Peaceful, yet isolating.",
+      "connected_to": ["command_bridge"],
+      "facilities": ["viewport", "telescope", "seating_area"],
+      "default_atmosphere": "normal",
+      "default_power": true,
+      "default_sealed": true
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "_comment": "Player action definitions - TODO: Expand with full action set",
+  "_version": "1.0.0",
+  "actions": [
+    {
+      "id": "explore_location",
+      "name": "Explore Current Location",
+      "category": "investigation",
+      "description": "Carefully examine your current location for useful items, clues, or hazards.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Find useful items or equipment",
+        "Discover important clues",
+        "Trigger environmental hazard",
+        "Find nothing of value"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "talk_to_npc",
+      "name": "Talk to Crew Member",
+      "category": "social_interaction",
+      "description": "Engage in conversation with a nearby crew member.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Gain information or insight",
+        "Improve relationship",
+        "Worsen relationship",
+        "Receive quest or objective"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "rest",
+      "name": "Rest and Recover",
+      "category": "rest_recovery",
+      "description": "Take time to rest, reducing stress and recovering some health.",
+      "requirements": {
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Reduce stress significantly",
+        "Recover minor health",
+        "Interrupted by emergency"
+      ],
+      "cooldown": 3,
+      "one_time": false
+    },
+    {
+      "id": "check_systems",
+      "name": "Check Ship Systems",
+      "category": "investigation",
+      "description": "Review ship system status and diagnostics.",
+      "requirements": {
+        "location": "command_bridge",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Identify critical issues",
+        "Spot degrading systems early",
+        "Discover sabotage"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    }
+  ]
+}

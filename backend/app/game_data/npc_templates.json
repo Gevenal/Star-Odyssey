@@ -1,0 +1,89 @@
+{
+  "_comment": "NPC templates - TODO: Create full 9 NPC roster",
+  "_version": "1.0.0",
+  "templates": [
+    {
+      "template_id": "npc_captain",
+      "name": "Captain Elena Chen",
+      "role": "Ship Captain",
+      "starting_location": "command_bridge",
+      "personality_traits": {
+        "core_value": "duty_driven",
+        "social_style": "authoritative",
+        "stress_response": "analytical",
+        "decision_making": "logical",
+        "morality": "utilitarian"
+      },
+      "starting_health": 85,
+      "starting_stress": 45,
+      "initial_goals": [
+        "Maintain crew cohesion",
+        "Restore ship systems",
+        "Ensure everyone survives until rescue"
+      ],
+      "secrets": [
+        {
+          "id": "secret_captain_override",
+          "content": "Knows override codes that could sacrifice crew to save ship",
+          "known_by_player": false,
+          "reveal_condition": "trust_level > 60"
+        }
+      ],
+      "hidden_agenda": "Willing to sacrifice individuals to save the majority",
+      "starting_inventory": ["captain_keycard", "sidearm"]
+    },
+    {
+      "template_id": "npc_engineer",
+      "name": "Marcus \"Wrench\" Okafor",
+      "role": "Chief Engineer",
+      "starting_location": "engineering",
+      "personality_traits": {
+        "core_value": "survival_focused",
+        "social_style": "withdrawn",
+        "stress_response": "proactive",
+        "decision_making": "pragmatic",
+        "morality": "flexible"
+      },
+      "starting_health": 90,
+      "starting_stress": 55,
+      "initial_goals": [
+        "Keep reactor stable",
+        "Repair critical systems",
+        "Secure personal survival"
+      ],
+      "secrets": [
+        {
+          "id": "secret_sabotage_knowledge",
+          "content": "Knows who sabotaged the ship but is afraid to reveal it",
+          "known_by_player": false,
+          "reveal_condition": "confrontation or trust_level > 75"
+        }
+      ],
+      "hidden_agenda": "Has evidence about sabotage but fears retaliation",
+      "starting_inventory": ["multitool", "repair_kit"]
+    },
+    {
+      "template_id": "npc_medic",
+      "name": "Dr. Yuki Tanaka",
+      "role": "Chief Medical Officer",
+      "starting_location": "med_bay",
+      "personality_traits": {
+        "core_value": "humanitarian",
+        "social_style": "empathetic",
+        "stress_response": "calm",
+        "decision_making": "emotional",
+        "morality": "selfless"
+      },
+      "starting_health": 80,
+      "starting_stress": 40,
+      "initial_goals": [
+        "Keep everyone healthy",
+        "Prevent crew mental breakdowns",
+        "Maintain medical supplies"
+      ],
+      "secrets": [],
+      "hidden_agenda": null,
+      "starting_inventory": ["medical_scanner", "trauma_kit"]
+    }
+  ]
+}
