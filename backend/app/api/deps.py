@@ -1,191 +1,66 @@
-"""Dependency injection for API endpoints."""
+"""Dependency injection for API routes."""
+from motor.motor_asyncio import AsyncIOMotorClient
+from app.core.session_state_manager import SessionStateManager
+from app.core.game_state_manager import GameStateManager
+from app.config import settings
 
-from typing import AsyncGenerator
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from redis.asyncio import Redis
-from app.core.game_loop import GameLoop
-from app.core.state_manager import StateManager
-from app.ai.gemini_client import GeminiClient
-from app.db.redis_cache import RedisCache
-
-
-# Global instances (to be initialized on app startup)
-_game_loop: GameLoop | None = None
-_state_manager: StateManager | None = None
-_gemini_client: GeminiClient | None = None
+# Global MongoDB client (initialized in main.py)
+_mongo_client: AsyncIOMotorClient = None
 
 
-async def get_db() -> AsyncGenerator[AsyncIOMotorDatabase, None]:
+def set_mongo_client(client: AsyncIOMotorClient):
+    """Set MongoDB client (called during app startup)."""
+    global _mongo_client
+    _mongo_client = client
+
+
+def get_mongo_client() -> AsyncIOMotorClient:
+    """Get MongoDB client."""
+    if _mongo_client is None:
+        raise RuntimeError("MongoDB client not initialized. Call set_mongo_client() first.")
+    return _mongo_client
+
+
+def get_session_manager() -> SessionStateManager:
     """
-    Get MongoDB database instance.
-
-    Yields:
-        AsyncIOMotorDatabase: Database instance
-
-    Raises:
-        RuntimeError: If database not initialized
-    """
-    # TODO: Implement database dependency
-    # from app.db.mongodb import get_database
-    # db = await get_database()
-    # try:
-    #     yield db
-    # finally:
-    #     pass  # Connection pooling handles cleanup
-    raise NotImplementedError("Database dependency not yet implemented")
-
-
-async def get_redis() -> AsyncGenerator[Redis, None]:
-    """
-    Get Redis client instance.
-
-    Yields:
-        Redis: Redis client
-
-    Raises:
-        RuntimeError: If Redis not initialized
-    """
-    # TODO: Implement Redis dependency
-    # from app.db.redis_cache import get_redis
-    # redis_client = await get_redis()
-    # try:
-    #     yield redis_client.client
-    # finally:
-    #     pass  # Connection pooling handles cleanup
-    raise NotImplementedError("Redis dependency not yet implemented")
-
-
-async def get_redis_cache() -> RedisCache:
-    """
-    Get RedisCache instance.
-
+    Get SessionStateManager for database operations.
+    
     Returns:
-        RedisCache: Redis cache wrapper
-
-    Raises:
-        RuntimeError: If Redis not initialized
+        SessionStateManager: Database persistence manager
     """
-    # TODO: Implement Redis cache dependency
-    # from app.db.redis_cache import _redis_cache
-    # if _redis_cache is None:
-    #     raise RuntimeError("Redis cache not initialized")
-    # return _redis_cache
-    raise NotImplementedError("Redis cache dependency not yet implemented")
+    client = get_mongo_client()
+    return SessionStateManager(client, redis_cache=None)
 
 
-async def get_game_loop() -> GameLoop:
+def get_game_state_manager_class():
     """
-    Get GameLoop instance.
-
+    Return the GameStateManager class (not instance).
+    
+    GameStateManager is typically instantiated inside GameLoop,
+    not as a dependency. This function is provided for special cases.
+    
     Returns:
-        GameLoop: Game loop orchestrator
-
-    Raises:
-        RuntimeError: If game loop not initialized
+        type: GameStateManager class
     """
-    # TODO: Implement game loop dependency
-    # global _game_loop
-    # if _game_loop is None:
-    #     raise RuntimeError("GameLoop not initialized. Check app startup.")
-    # return _game_loop
-    raise NotImplementedError("GameLoop dependency not yet implemented")
+    return GameStateManager
 
-
-async def get_state_manager() -> StateManager:
+def get_gemini_client():
     """
-    Get StateManager instance.
-
-    Returns:
-        StateManager: State manager
-
-    Raises:
-        RuntimeError: If state manager not initialized
+    Get GeminiClient instance (placeholder).
+    TODO Phase 1: Implement actual GeminiClient.
     """
-    # TODO: Implement state manager dependency
-    # global _state_manager
-    # if _state_manager is None:
-    #     raise RuntimeError("StateManager not initialized. Check app startup.")
-    # return _state_manager
-    raise NotImplementedError("StateManager dependency not yet implemented")
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="GeminiClient not yet implemented"
+    )
 
 
-async def get_gemini_client() -> GeminiClient:
+def get_game_loop():
     """
-    Get GeminiClient instance.
-
-    Returns:
-        GeminiClient: Gemini AI client
-
-    Raises:
-        RuntimeError: If Gemini client not initialized
+    Get GameLoop instance (placeholder).
+    TODO Phase 1: Implement actual GameLoop.
     """
-    # TODO: Implement Gemini client dependency
-    # global _gemini_client
-    # if _gemini_client is None:
-    #     raise RuntimeError("GeminiClient not initialized. Check app startup.")
-    # return _gemini_client
-    raise NotImplementedError("GeminiClient dependency not yet implemented")
-
-
-async def init_dependencies(
-    db: AsyncIOMotorDatabase,
-    redis_cache: RedisCache,
-    gemini_api_key: str
-):
-    """
-    Initialize global dependency instances.
-
-    Called during app startup to create singleton instances of core services.
-
-    Args:
-        db: MongoDB database instance
-        redis_cache: Redis cache instance
-        gemini_api_key: Gemini API key
-    """
-    # TODO: Implement dependency initialization
-    # global _game_loop, _state_manager, _gemini_client
-
-    # # Initialize Gemini client
-    # _gemini_client = GeminiClient(api_key=gemini_api_key)
-
-    # # Initialize repositories
-    # from app.db.repositories.state_repo import StateRepository
-    # from app.db.repositories.game_repo import GameRepository
-    # state_repo = StateRepository(db)
-    # game_repo = GameRepository(db)
-
-    # # Initialize state manager
-    # _state_manager = StateManager(state_repo=state_repo, redis_cache=redis_cache)
-
-    # # Initialize rules engine
-    # from app.core.rules.engine import RulesEngine
-    # rules_engine = RulesEngine()
-    # # Register all rules...
-
-    # # Initialize game loop
-    # _game_loop = GameLoop(
-    #     state_manager=_state_manager,
-    #     rules_engine=rules_engine,
-    #     gemini_client=_gemini_client
-    # )
-
-    pass
-
-
-async def cleanup_dependencies():
-    """
-    Cleanup global dependency instances.
-
-    Called during app shutdown to properly close connections and cleanup resources.
-    """
-    # TODO: Implement dependency cleanup
-    # global _game_loop, _state_manager, _gemini_client
-
-    # if _gemini_client:
-    #     await _gemini_client.close()
-    #     _gemini_client = None
-
-    # _game_loop = None
-    # _state_manager = None
-
-    pass
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="GameLoop not yet implemented"
+    )

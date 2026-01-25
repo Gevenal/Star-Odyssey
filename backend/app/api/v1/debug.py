@@ -9,7 +9,7 @@ from app.api.schemas import (
     DebugTriggerEventRequest,
     DebugExplainRisksResponse,
 )
-from app.api.deps import get_state_manager, get_gemini_client, get_game_loop
+from app.api.deps import get_session_manager, get_gemini_client, get_game_loop
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ def check_dev_only():
 )
 async def dump_state(
     session_id: str,
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ) -> DebugStateResponse:
     """
     Dump full game state for debugging.
@@ -84,7 +84,7 @@ async def dump_state(
 )
 async def set_state_variable(
     request: DebugSetVariableRequest,
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ) -> Dict[str, Any]:
     """
     Manually set game state variable for testing.

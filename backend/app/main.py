@@ -1,19 +1,23 @@
+"""FastAPI application entry point."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient 
+
 from app.config import settings
 from app.api.v1.router import api_router
+from app.api.deps import set_mongo_client 
 
-# Initialize FastAPI app
+# Create FastAPI app
 app = FastAPI(
-    title="Odyssey-7 API",
-    description="AI-powered space survival game backend for Google Gemini Hackathon",
+    title="Odyssey-7 Game API",
+    description="AI-powered narrative game backend",
     version="0.1.0",
     debug=settings.debug,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# Configure CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -25,79 +29,53 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup."""
-    # TODO: Initialize MongoDB connection
-    # from app.db.mongodb import init_mongodb
-    # await init_mongodb(settings.mongodb_uri, settings.mongodb_db_name)
-
-    # TODO: Initialize Redis connection
-    # from app.db.redis_cache import init_redis
-    # await init_redis(settings.redis_url)
-
-    # TODO: Initialize dependencies (GameLoop, StateManager, GeminiClient)
-    # from app.api.deps import init_dependencies
-    # from app.db.mongodb import get_database
-    # from app.db.redis_cache import get_redis
-    # db = await get_database()
-    # redis_cache = await get_redis()
-    # await init_dependencies(db, redis_cache, settings.gemini_api_key)
-
-    pass
+    """Initialize connections on startup."""
+    print("[Startup] Initializing MongoDB connection...")
+    
+    # Initialize MongoDB client
+    mongo_client = AsyncIOMotorClient(settings.mongodb_uri)
+    set_mongo_client(mongo_client)
+    
+    # Test connection
+    try:
+        await mongo_client.admin.command('ping')
+        print(f"[Startup] MongoDB connected: {settings.mongodb_uri}")
+    except Exception as e:
+        print(f"[Startup] MongoDB connection failed: {e}")
+        raise
+    
+    print("[Startup] Application startup complete")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    # TODO: Close MongoDB connection
-    # from app.db.mongodb import close_mongodb
-    # await close_mongodb()
-
-    # TODO: Close Redis connection
-    # from app.db.redis_cache import close_redis
-    # await close_redis()
-
-    # TODO: Cleanup dependencies
-    # from app.api.deps import cleanup_dependencies
-    # await cleanup_dependencies()
-
-    pass
+    print("[Shutdown] Closing connections...")
+    # MongoDB client cleanup happens automatically
+    print("[Shutdown] Shutdown complete")
 
 
-@app.get("/", tags=["Root"])
-async def root():
-    """
-    Root endpoint.
-
-    Returns basic API information.
-    """
-    return {
-        "message": "Odyssey-7 API",
-        "status": "online",
-        "version": "0.1.0",
-        "docs": "/docs",
-        "redoc": "/redoc"
-    }
+# Include API routes
+app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/health", tags=["Health"])
+@app.get("/health")
 async def health_check():
-    """
-    Health check endpoint.
-
-    Returns API health status and environment info.
-    """
+    """Health check endpoint."""
     return {
         "status": "healthy",
+        "message": "Odyssey-7 API is running",
         "environment": settings.app_env,
         "debug": settings.debug
-        # TODO: Add database health check
-        # TODO: Add Redis health check
-        # TODO: Add Gemini API health check
     }
 
 
-# Include v1 API router
-app.include_router(
-    api_router,
-    prefix="/api/v1"
-)
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "message": "Welcome to Odyssey-7 Game API",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "health": "/health"
+    }

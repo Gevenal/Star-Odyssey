@@ -7,7 +7,7 @@ from app.api.schemas import (
     ListSavesResponse,
     LoadGameResponse,
 )
-from app.api.deps import get_state_manager
+from app.api.deps import get_session_manager
 
 router = APIRouter()
 
@@ -21,7 +21,7 @@ router = APIRouter()
 )
 async def save_game(
     request: SaveGameRequest,
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ) -> SaveGameResponse:
     """
     Save current game state.
@@ -81,7 +81,7 @@ async def save_game(
     description="List all saved games with metadata."
 )
 async def list_saves(
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ) -> ListSavesResponse:
     """
     List all saved games.
@@ -132,7 +132,7 @@ async def list_saves(
 )
 async def load_game(
     save_id: str,
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ) -> LoadGameResponse:
     """
     Load a saved game.
@@ -182,7 +182,7 @@ async def load_game(
 )
 async def delete_save(
     save_id: str,
-    state_manager=Depends(get_state_manager)
+    state_manager=Depends(get_session_manager)
 ):
     """
     Delete a saved game.
