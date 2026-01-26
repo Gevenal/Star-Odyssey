@@ -53,8 +53,8 @@ class GeminiClient:
     
     # 模型名称映射
     MODEL_MAP = {
-        "pro": "gemini-1.5-pro",
-        "flash": "gemini-1.5-flash",
+        "pro": "models/gemini-pro-latest",
+        "flash": "models/gemini-flash-latest",
     }
     
     # 默认配置
