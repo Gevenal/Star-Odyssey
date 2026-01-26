@@ -24,23 +24,18 @@ class GameStateManager:
     - Redis caching
     """
     
-    def __init__(self, config_dir: str = "/app/app/game_data"):
-        """
-        Initialize state manager
-        
-        Args:
-            config_dir: Path to configuration files directory
-        """
-        self.config_dir = Path(config_dir)
-        
-        # Load configuration files
+    from pathlib import Path
+
+    def __init__(self, config_dir: Optional[str] = None):
+        # app/ 目录
+        app_dir = Path(__file__).resolve().parents[1]
+        # app/game_data
+        default_dir = app_dir / "game_data"
+        self.config_dir = Path(config_dir) if config_dir else default_dir
+
         self.state_config = self._load_json("state_variables.json")
         self.world_config = self._load_json("world_config.json")
-        
-        # Initialize current state
         self.state = self._initialize_state()
-        
-        # Turn history (for AI context)
         self.turn_history = []
     
     def _load_json(self, filename: str) -> Dict:
@@ -62,7 +57,6 @@ class GameStateManager:
                 "current_day": 1,
                 "current_hour": 0,  # In-game time (0-168 hours, 7 days)
                 "game_phase": "intro",  # intro, playing, crisis, ending
-                "current_turn": 1,
                 "started_at": None,
                 "last_updated": None
             },

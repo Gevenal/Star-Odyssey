@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import uuid
 from app.config import settings
 from .game_state_manager import GameStateManager
-
+from pathlib import Path
 
 class SessionStateManager:
     """
@@ -26,7 +26,7 @@ class SessionStateManager:
     - AI interaction
     """
     
-    def __init__(self, mongo_client: AsyncIOMotorClient, redis_cache=None):
+    def __init__(self, mongo_client: AsyncIOMotorClient, redis_cache=None, config_dir: str | None = None): # type: ignore
         """
         Initialize session manager
         
@@ -34,6 +34,9 @@ class SessionStateManager:
             mongo_client: Motor async MongoDB client
             redis_cache: Redis cache client (optional)
         """
+        app_dir = Path(__file__).resolve().parents[1]    # .../app
+        default_dir = app_dir / "game_data"
+
         self.mongo_client = mongo_client
         self.db = mongo_client[settings.mongodb_db_name]
         
@@ -45,7 +48,7 @@ class SessionStateManager:
         self.redis_cache = redis_cache
         
         # Config directory (for initializing GameStateManager)
-        self.config_dir = "/app/app/game_data"
+        self.config_dir = str(default_dir) if config_dir is None else config_dir
     
     async def create_session(self, player_name: str) -> str:
         """
