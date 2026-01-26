@@ -3,9 +3,15 @@ Game State Manager - In-Memory Game State Operations
 Responsible for reading, writing, and validating game state
 """
 import json
+import re
 from typing import Any, Dict, Optional
 from pathlib import Path
 from copy import deepcopy
+
+
+def _default_game_data_dir() -> str:
+    """Resolve app/game_data relative to this file (app/core/)."""
+    return str((Path(__file__).parent.parent / "game_data").resolve())
 
 
 class GameStateManager:
@@ -24,119 +30,102 @@ class GameStateManager:
     - Redis caching
     """
     
-    def __init__(self, config_dir: str = "/app/app/game_data"):
+    def __init__(self, config_dir: Optional[str] = None):
         """
-        Initialize state manager
-        
+        Initialize state manager.
+
         Args:
-            config_dir: Path to configuration files directory
+            config_dir: Path to game_data (state_variables.json, world_config.json).
+                        Defaults to app/game_data next to app/core/.
         """
-        self.config_dir = Path(config_dir)
-        
-        # Load configuration files
+        self.config_dir = Path(config_dir or _default_game_data_dir())
+
+        # Load configuration files (empty dict if missing)
         self.state_config = self._load_json("state_variables.json")
         self.world_config = self._load_json("world_config.json")
-        
+
         # Initialize current state
         self.state = self._initialize_state()
-        
+
         # Turn history (for AI context)
         self.turn_history = []
-    
+
     def _load_json(self, filename: str) -> Dict:
-        """Load JSON configuration file"""
+        """Load JSON configuration file; returns {} if file not found."""
         filepath = self.config_dir / filename
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
     
     def _initialize_state(self) -> Dict:
         """
-        Initialize game state from configuration files
-        
-        Based on state_variables.json and world_config.json
+        Initialize game state from state_variables.json and world_config.json.
+
+        - state_variables: expects "variables": [{"variable_path":"world.resources.X.current","initial_value":...}]
+        - world_config: expects top-level "locations": {id: {name, connected_to, default_atmosphere, ...}}
+          and "game_settings": {"starting_location": "..."}
         """
+        game_settings = self.world_config.get("game_settings", {})
+        starting_location = game_settings.get("starting_location", "command_bridge")
+
         state = {
-            # Metadata
             "game_meta": {
-                "current_turn": 0,
-                "current_day": 1,
-                "current_hour": 0,  # In-game time (0-168 hours, 7 days)
-                "game_phase": "intro",  # intro, playing, crisis, ending
                 "current_turn": 1,
+                "current_day": 1,
+                "current_hour": 0,
+                "game_phase": "intro",
                 "started_at": None,
-                "last_updated": None
+                "last_updated": None,
             },
-            
-            # Resources (read initial values from state_variables.json)
             "resources": {},
-            
-            # Ship systems
             "ship_systems": {},
-            
-            # Crew collective state
             "crew_collective": {},
-            
-            # Mission progress
             "mission_progress": {},
-            
-            # Environmental threats
             "threats": {},
-            
-            # Special event flags
             "special_events": {},
-            
-            # Location states (read from world_config.json)
             "locations": {},
-            
-            # NPC states (filled later by NPC generator)
             "npcs": {},
-            
-            # Player state
             "player": {
                 "name": "",
                 "health": 100,
                 "stress": 0,
-                "current_location": "command_bridge",
+                "current_location": starting_location,
+                "location": starting_location,
                 "inventory": [],
                 "known_secrets": [],
-                "completed_actions": []
-            }
+                "completed_actions": [],
+            },
         }
-        
-        # Fill resource initial values
-        if "state_variables" in self.state_config:
-            resources_config = self.state_config["state_variables"].get("resources", {})
-            for key, config in resources_config.items():
-                state["resources"][key] = config.get("current_value", 0)
-            
-            # Fill ship systems
-            systems_config = self.state_config["state_variables"].get("ship_systems", {})
-            for key, config in systems_config.items():
-                state["ship_systems"][key] = config.get("current_value", 0)
-            
-            # Fill crew state
-            crew_config = self.state_config["state_variables"].get("crew_collective", {})
-            for key, config in crew_config.items():
-                state["crew_collective"][key] = config.get("current_value", 50)
-            
-            # Fill mission progress
-            mission_config = self.state_config["state_variables"].get("mission_progress", {})
-            for key, config in mission_config.items():
-                state["mission_progress"][key] = config.get("current_value", False)
-        
-        # Fill location states
-        if "world_config" in self.world_config:
-            locations = self.world_config["world_config"].get("locations", [])
-            for loc in locations:
-                loc_id = loc.get("location_id")
-                state["locations"][loc_id] = {
-                    "name": loc.get("name"),
-                    "status": loc.get("current_status", "normal"),
-                    "atmosphere": "normal",
-                    "accessible": True,
-                    "connected_to": loc.get("connected_to", [])
-                }
-        
+
+        # Resources from state_variables "variables" (variable_path like world.resources.oxygen_level.current)
+        for v in self.state_config.get("variables", []):
+            path = v.get("variable_path") or ""
+            val = v.get("initial_value")
+            if path and val is None:
+                continue
+            m = re.match(r"^world\.resources\.([^.]+)\.current$", path)
+            if m:
+                state["resources"][m.group(1)] = float(val) if isinstance(val, (int, float)) else val
+
+        # Fallback: old state_variables.resources format
+        if not state["resources"] and "state_variables" in self.state_config:
+            for k, cfg in self.state_config["state_variables"].get("resources", {}).items():
+                state["resources"][k] = cfg.get("current_value", 0)
+
+        # Locations from world_config top-level "locations" dict
+        for loc_id, loc in self.world_config.get("locations", {}).items():
+            if not isinstance(loc, dict):
+                continue
+            state["locations"][loc_id] = {
+                "name": loc.get("name", loc_id),
+                "status": "normal",
+                "atmosphere": loc.get("default_atmosphere", "normal"),
+                "accessible": True,
+                "connected_to": loc.get("connected_to", []),
+            }
+
         return state
     
     # ===== State Access Methods =====

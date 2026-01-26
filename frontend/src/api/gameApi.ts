@@ -14,10 +14,9 @@ export const gameApi = {
    * Start a new game session
    */
   startGame: async (playerName: string): Promise<GameStartResponse> => {
-    // TODO: Implement API call
     const response = await apiClient.post<GameStartResponse>('/game/start', {
-      playerName,
-    } as GameStartRequest);
+      player_name: playerName,
+    });
     return response.data;
   },
 
@@ -25,8 +24,15 @@ export const gameApi = {
    * Submit a player action (non-streaming)
    */
   submitAction: async (action: PlayerAction): Promise<GameActionResponse> => {
-    // TODO: Implement API call
-    const response = await apiClient.post<GameActionResponse>('/game/action', action);
+    const response = await apiClient.post<GameActionResponse>('/game/action', {
+      session_id: action.sessionId,
+      action_type: action.actionType,
+      action_id: action.actionId,
+      action_text: action.actionText,
+      target_location: action.targetLocation,
+      target_npc: action.targetNpc,
+      target_item: action.targetItem,
+    });
     return response.data;
   },
 
@@ -72,8 +78,7 @@ export const gameApi = {
    * End the current turn
    */
   endTurn: async (sessionId: string): Promise<TurnEndResponse> => {
-    // TODO: Implement API call
-    const response = await apiClient.post<TurnEndResponse>(`/game/turn/end/${sessionId}`);
+    const response = await apiClient.post<TurnEndResponse>(`/game/end-turn/${sessionId}`);
     return response.data;
   },
 

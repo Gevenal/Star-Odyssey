@@ -45,22 +45,23 @@ def get_game_state_manager_class():
     return GameStateManager
 
 def get_gemini_client():
-    """
-    Get GeminiClient instance (placeholder).
-    TODO Phase 1: Implement actual GeminiClient.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="GeminiClient not yet implemented"
-    )
+    """Get GeminiClient singleton."""
+    from app.ai.gemini_client import get_gemini_client as _get
+    return _get()
+
+
+def get_rules_engine():
+    """Get a RulesEngine with ResourceAvailability and LocationTopology rules wired to GameDataLoader."""
+    from app.core.rules.engine import RulesEngine
+    from app.game_data.loader import get_game_data_loader
+    return RulesEngine(game_data_loader=get_game_data_loader())
 
 
 def get_game_loop():
-    """
-    Get GameLoop instance (placeholder).
-    TODO Phase 1: Implement actual GameLoop.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="GameLoop not yet implemented"
+    """Get GameLoop wired to SessionStateManager, RulesEngine, GeminiClient."""
+    from app.core.game_loop import GameLoop
+    return GameLoop(
+        state_manager=get_session_manager(),
+        rules_engine=get_rules_engine(),
+        gemini_client=get_gemini_client(),
     )

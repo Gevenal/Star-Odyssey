@@ -12,10 +12,9 @@ from app.api.schemas import (
 from app.models.action import PlayerAction
 from app.models.response import GameActionResponse
 from app.models.game_state import GameState
-from app.core.game_state_manager import GameStateManager
 from app.core.session_state_manager import SessionStateManager
-from app.utils.state_converter import StateConverter  # 👈 唯一新增的 import
-from app.api.deps import get_session_manager
+from app.utils.state_converter import StateConverter
+from app.api.deps import get_session_manager, get_game_loop
 
 router = APIRouter()
 
@@ -85,79 +84,29 @@ async def start_game(
 )
 async def submit_action(
     action: PlayerAction,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
+    game_loop=Depends(get_game_loop),
 ) -> GameActionResponse:
     """
     Submit a player action (non-streaming response).
 
     - Validates action against current game rules
-    - Processes action through game loop
-    - Applies state changes
-    - Generates AI narration
-    - Triggers NPC reactions
-    - Checks for ending conditions
-
-    Args:
-        action: Player action with session_id and action details
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        GameActionResponse with narration and all state changes
+    - Processes action through game loop (AI narration, state updates)
+    - Applies state changes and checks ending conditions
 
     Raises:
         HTTPException 404: If session not found
         HTTPException 400: If action is invalid
         HTTPException 409: If game has ended
     """
-    # 1. Load state from database
     try:
-        state_data = await session_mgr.get_state(action.session_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {action.session_id} not found"
-        )
-    
-    # 2. Instantiate GameStateManager (in-memory)
-    game_state = GameStateManager()
-    game_state.load_snapshot(state_data)
-    
-    # Check if game has ended
-    game_over = game_state.get("game_meta.game_phase") == "ending"
-    if game_over:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Game has ended"
-        )
-    
-    # 3. TODO Phase 1: Create GameLoop and process action
-    # For now, simulate state changes
-    game_state.modify("resources.oxygen_level.current", -2.5)
-    game_state.increment_turn()
-    
-    # TODO Phase 1: AI narration generation
-    narration = [
-        f"[System] Oxygen level decreased by 2.5%",
-        f"[Player] Executed action: {action.action_type}"
-    ]
-    
-    # 4. Save back to database
-    snapshot = game_state.get_snapshot()
-    save_success = await session_mgr.update_state(action.session_id, snapshot)
-    
-    # 5. Return results
-    # 👇 保持原有的返回格式
-    return GameActionResponse(
-        success=True,  # 👈 添加这个字段（GameActionResponse 需要）
-        narration="\n".join(narration),  # 👈 修改：从 list 改为 string
-        resource_changes=[],  # 👈 添加这个字段
-        state_changes=[],  # 👈 添加这个字段
-        npc_reactions=[],  # 👈 添加这个字段
-        available_actions=["explore_bridge", "check_systems"],
-        mood="tense",
-        trigger_ending=False,  # 👈 添加这个字段
-        ending_id=None  # 👈 添加这个字段
-    )
+        return await game_loop.process_action(action.session_id, action)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        if "game has ended" in msg.lower() or "ended" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
 
 @router.post(
@@ -227,32 +176,20 @@ async def submit_action_stream(
 )
 async def get_game_state(
     session_id: str,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
-) -> GameState:  # 👈 修改：添加返回类型注解
+    game_loop=Depends(get_game_loop),
+) -> GameState:
     """
     Get current game state for a session.
-
-    Args:
-        session_id: Game session identifier
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        Complete game state (as GameState model for type safety)
 
     Raises:
         HTTPException 404: If session not found
     """
     try:
-        state_data = await session_mgr.get_state(session_id)
-        
-        # 👇 新增：Convert to GameState model
-        game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
-        
-        return game_state  # 👈 修改：返回 GameState 对象而不是字典
-    except ValueError:
+        return await game_loop.get_state(session_id)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found"
+            detail=str(e) or f"Session {session_id} not found",
         )
 
 
@@ -316,64 +253,22 @@ async def get_available_actions(
 )
 async def end_turn(
     session_id: str,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
+    game_loop=Depends(get_game_loop),
 ) -> TurnEndResponse:
     """
-    Manually end current turn and advance game state.
-
-    Executes in order:
-    1. World update (resource decay, system degradation)
-    2. Random event generation and processing
-    3. NPC autonomous actions
-    4. Ending condition checks
-
-    Args:
-        session_id: Game session identifier
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        TurnEndResponse with events, NPC actions, and state summary
+    Manually end current turn: resource decay, increment, ending check.
 
     Raises:
         HTTPException 404: If session not found
         HTTPException 409: If game has ended
     """
-    # Load state
     try:
-        state_data = await session_mgr.get_state(session_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found"
-        )
-    
-    # Check if game has ended
-    game_state = GameStateManager()
-    game_state.load_snapshot(state_data)
-    
-    if game_state.get("game_meta.game_phase") == "ending":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Game has ended"
-        )
-    
-    # TODO Phase 1: Implement turn advancement with GameLoop
-    # For now, simulate basic turn changes
-    game_state.modify("resources.oxygen_level.current", -2.5)
-    game_state.increment_turn()
-    
-    # Save state
-    snapshot = game_state.get_snapshot()
-    await session_mgr.update_state(session_id, snapshot)
-    
-    return TurnEndResponse(
-        events_occurred=[],  # TODO Phase 1
-        npc_actions_taken=[],  # TODO Phase 1
-        state_summary={
-            "resources_changed": ["oxygen_level: -2.5"],
-            "turn_advanced": True
-        },
-        narration="Time passes. The ship creaks ominously.",
-        critical_alerts=[],  # TODO: Check resource thresholds
-        turn_number=game_state.get("game_meta.current_turn")
-    )
+        result = await game_loop.advance_turn(session_id)
+        return TurnEndResponse(**result)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        if "ended" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)

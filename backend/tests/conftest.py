@@ -101,8 +101,8 @@ def sample_world_state(sample_resource_levels):
     """Sample world state for testing."""
     return WorldState(
         day=3,
-        turn=15,
-        time_of_day="Morning",
+        turn=1,
+        time_of_day="09:00",
         resources=sample_resource_levels,
         crew_morale=65,
         crew_cohesion=70,
@@ -124,7 +124,7 @@ def sample_game_state(sample_player_state, sample_world_state, sample_npc):
         npcs={"test_npc_001": sample_npc},
         world=sample_world_state,
         turn_count=15,
-        oracle_sentience_level=35
+        oracle_sentience_level=1
     )
 
 
@@ -133,7 +133,7 @@ def sample_player_action():
     """Sample player action for testing."""
     return PlayerAction(
         session_id="test_session_123",
-        action_type="freeform",
+        action_type="investigation",
         action_id="custom_action",
         action_text="I check the reactor controls for damage",
         target_location="Reactor Room",

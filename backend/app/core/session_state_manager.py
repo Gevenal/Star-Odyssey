@@ -43,9 +43,9 @@ class SessionStateManager:
         
         # Redis cache (optional)
         self.redis_cache = redis_cache
-        
-        # Config directory (for initializing GameStateManager)
-        self.config_dir = "/app/app/game_data"
+
+        # Config directory for GameStateManager (app/game_data)
+        self.config_dir = str(settings.config_directory)
     
     async def create_session(self, player_name: str) -> str:
         """
