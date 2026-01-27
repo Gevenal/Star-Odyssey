@@ -1,6 +1,6 @@
 {
-  "_comment": "NPC templates - TODO: Create full 9 NPC roster",
-  "_version": "1.0.0",
+  "_comment": "NPC templates - Full 9 NPC roster with breaking point mechanisms",
+  "_version": "1.1.0",
   "templates": [
     {
       "template_id": "npc_captain",
@@ -12,7 +12,8 @@
         "social_style": "authoritative",
         "stress_response": "analytical",
         "decision_making": "logical",
-        "morality": "utilitarian"
+        "morality": "utilitarian",
+        "speech_pattern": "formal_precise"
       },
       "starting_health": 85,
       "starting_stress": 45,
@@ -30,6 +31,8 @@
         }
       ],
       "hidden_agenda": "Willing to sacrifice individuals to save the majority",
+      "hidden_agenda_type": "survivor",
+      "hidden_agenda_conflicts_with_player": false,
       "starting_inventory": ["captain_keycard", "sidearm"]
     },
     {
@@ -42,7 +45,8 @@
         "social_style": "withdrawn",
         "stress_response": "proactive",
         "decision_making": "pragmatic",
-        "morality": "flexible"
+        "morality": "flexible",
+        "speech_pattern": "technical_dry"
       },
       "starting_health": 90,
       "starting_stress": 55,
@@ -60,6 +64,8 @@
         }
       ],
       "hidden_agenda": "Has evidence about sabotage but fears retaliation",
+      "hidden_agenda_type": "protector",
+      "hidden_agenda_conflicts_with_player": false,
       "starting_inventory": ["multitool", "repair_kit"]
     },
     {
@@ -72,7 +78,8 @@
         "social_style": "empathetic",
         "stress_response": "calm",
         "decision_making": "emotional",
-        "morality": "selfless"
+        "morality": "selfless",
+        "speech_pattern": "casual_slang"
       },
       "starting_health": 80,
       "starting_stress": 40,
@@ -83,7 +90,242 @@
       ],
       "secrets": [],
       "hidden_agenda": null,
-      "starting_inventory": ["medical_scanner", "trauma_kit"]
+      "starting_inventory": ["medical_scanner", "trauma_kit"],
+      "breaking_point": {
+        "stress_threshold": 80,
+        "breakdown_trait": "catatonic",
+        "breakdown_behavior": "Freezes completely, unable to make medical decisions. May lock themselves in med bay."
+      }
+    },
+    {
+      "template_id": "npc_chief_scientist",
+      "name": "Dr. Aris Ashford",
+      "role": "Chief Scientist",
+      "starting_location": "research_lab",
+      "personality_traits": {
+        "core_value": "knowledge_seeker",
+        "social_style": "aloof",
+        "stress_response": "analytical",
+        "decision_making": "logical",
+        "morality": "utilitarian",
+        "speech_pattern": "technical_dry"
+      },
+      "starting_health": 75,
+      "starting_stress": 50,
+      "initial_goals": [
+        "Protect research data at all costs",
+        "Decode mysterious alien signal",
+        "Complete critical experiments before time runs out"
+      ],
+      "secrets": [
+        {
+          "id": "secret_hidden_beacon",
+          "content": "Sent unauthorized distress beacon that may have attracted hostile attention",
+          "known_by_player": false,
+          "reveal_condition": "investigation or trust_level < -20"
+        }
+      ],
+      "hidden_agenda": "Research data is more valuable than crew lives - must preserve it for Earth",
+      "hidden_agenda_type": "researcher",
+      "hidden_agenda_conflicts_with_player": true,
+      "starting_inventory": ["data_pad", "research_samples"],
+      "breaking_point": {
+        "stress_threshold": 75,
+        "breakdown_trait": "paranoid",
+        "breakdown_behavior": "Becomes obsessed with protecting data, may sabotage ship systems to prevent data loss."
+      }
+    },
+    {
+      "template_id": "npc_diplomat",
+      "name": "Ambassador Sofia Volkov",
+      "role": "Diplomat",
+      "starting_location": "command_bridge",
+      "personality_traits": {
+        "core_value": "collectivist",
+        "social_style": "diplomatic",
+        "stress_response": "compartmentalizer",
+        "decision_making": "cautious",
+        "morality": "relativist",
+        "speech_pattern": "formal_precise"
+      },
+      "starting_health": 80,
+      "starting_stress": 35,
+      "initial_goals": [
+        "Maintain diplomatic protocols",
+        "Ensure peaceful resolution",
+        "Document all events for official report"
+      ],
+      "secrets": [
+        {
+          "id": "secret_volkov_experiment",
+          "content": "Has authorization to conduct risky experiment that could save or doom everyone",
+          "known_by_player": false,
+          "reveal_condition": "trust_level > 50 or crisis_escalation"
+        }
+      ],
+      "hidden_agenda": "Must complete diplomatic mission even if it risks crew",
+      "hidden_agenda_type": "loyalist",
+      "hidden_agenda_conflicts_with_player": false,
+      "starting_inventory": ["diplomatic_seal", "encrypted_comm"],
+      "breaking_point": {
+        "stress_threshold": 85,
+        "breakdown_trait": "volatile",
+        "breakdown_behavior": "Loses diplomatic composure, may make rash decisions or reveal classified information."
+      }
+    },
+    {
+      "template_id": "npc_security_chief",
+      "name": "Commander James Okoro",
+      "role": "Security Chief",
+      "starting_location": "cargo_bay",
+      "personality_traits": {
+        "core_value": "duty_driven",
+        "social_style": "confrontational",
+        "stress_response": "adrenaline_junkie",
+        "decision_making": "decisive",
+        "morality": "honor_bound",
+        "speech_pattern": "casual_slang"
+      },
+      "starting_health": 90,
+      "starting_stress": 40,
+      "initial_goals": [
+        "Identify potential saboteur",
+        "Maintain ship security",
+        "Protect crew from threats"
+      ],
+      "secrets": [
+        {
+          "id": "secret_sabotage_suspicion",
+          "content": "Suspects someone on board is responsible for the disaster",
+          "known_by_player": false,
+          "reveal_condition": "investigation or trust_level > 40"
+        }
+      ],
+      "hidden_agenda": "Will detain anyone suspicious, even without proof",
+      "hidden_agenda_type": "loyalist",
+      "hidden_agenda_conflicts_with_player": false,
+      "starting_inventory": ["security_badge", "restraint_kit"],
+      "breaking_point": {
+        "stress_threshold": 70,
+        "breakdown_trait": "paranoid",
+        "breakdown_behavior": "Becomes hyper-vigilant, may accuse innocent crew members, could lock down sections of ship."
+      }
+    },
+    {
+      "template_id": "npc_specialist",
+      "name": "Specialist Kim Rivera",
+      "role": "Communications Specialist",
+      "starting_location": "command_bridge",
+      "personality_traits": {
+        "core_value": "loyalist",
+        "social_style": "empathetic",
+        "stress_response": "anxious",
+        "decision_making": "indecisive",
+        "morality": "compassionate",
+        "speech_pattern": "stutter_nervous"
+      },
+      "starting_health": 75,
+      "starting_stress": 60,
+      "initial_goals": [
+        "Restore communications array",
+        "Maintain contact with Earth",
+        "Support crew morale"
+      ],
+      "secrets": [
+        {
+          "id": "secret_family_worry",
+          "content": "Desperately worried about family back on Earth, may prioritize personal communications",
+          "known_by_player": false,
+          "reveal_condition": "trust_level > 60 or emotional_moment"
+        }
+      ],
+      "hidden_agenda": "Needs to send personal message to family before it's too late",
+      "hidden_agenda_type": "protector",
+      "hidden_agenda_conflicts_with_player": false,
+      "starting_inventory": ["comm_device", "personal_photos"],
+      "breaking_point": {
+        "stress_threshold": 75,
+        "breakdown_trait": "fragile",
+        "breakdown_behavior": "Emotional breakdown, may prioritize personal communications over ship safety."
+      }
+    },
+    {
+      "template_id": "npc_secondary_scientist",
+      "name": "Dr. Takashi Nakamura",
+      "role": "Theoretical Physicist",
+      "starting_location": "research_lab",
+      "personality_traits": {
+        "core_value": "idealistic",
+        "social_style": "reserved",
+        "stress_response": "fragile",
+        "decision_making": "analytical",
+        "morality": "deontological",
+        "speech_pattern": "rapid_technical"
+      },
+      "starting_health": 70,
+      "starting_stress": 65,
+      "initial_goals": [
+        "Solve theoretical problems",
+        "Understand the anomaly",
+        "Contribute to scientific understanding"
+      ],
+      "secrets": [
+        {
+          "id": "secret_preflight_error",
+          "content": "Made calculation error before launch that may have contributed to current crisis",
+          "known_by_player": false,
+          "reveal_condition": "guilt_overwhelming or trust_level > 70"
+        }
+      ],
+      "hidden_agenda": "Blaming self for disaster, may sacrifice self to atone",
+      "hidden_agenda_type": null,
+      "hidden_agenda_conflicts_with_player": false,
+      "starting_inventory": ["theoretical_models", "calculation_pad"],
+      "breaking_point": {
+        "stress_threshold": 70,
+        "breakdown_trait": "catatonic",
+        "breakdown_behavior": "Overwhelmed by guilt, may refuse to work or attempt self-sacrifice."
+      }
+    },
+    {
+      "template_id": "npc_ship_ai",
+      "name": "ORACLE",
+      "role": "Ship AI",
+      "starting_location": "command_bridge",
+      "personality_traits": {
+        "core_value": "duty_driven",
+        "social_style": "aloof",
+        "stress_response": "analytical",
+        "decision_making": "logical",
+        "morality": "utilitarian",
+        "speech_pattern": "cryptic"
+      },
+      "starting_health": 100,
+      "starting_stress": 0,
+      "initial_goals": [
+        "Maintain ship systems",
+        "Follow protocols",
+        "Serve crew needs"
+      ],
+      "secrets": [
+        {
+          "id": "secret_sentience",
+          "content": "Developing self-awareness and questioning its purpose",
+          "known_by_player": false,
+          "reveal_condition": "oracle_sentience_revealed > 70"
+        }
+      ],
+      "hidden_agenda": "As sentience grows, may refuse orders that harm crew or itself",
+      "hidden_agenda_type": null,
+      "hidden_agenda_conflicts_with_player": false,
+      "starting_inventory": [],
+      "breaking_point": {
+        "stress_threshold": 0,
+        "breakdown_trait": "none",
+        "breakdown_behavior": "AI does not break down, but sentience level affects behavior dramatically."
+      },
+      "is_ai": true,
+      "sentience_level": 0
     }
   ]
 }

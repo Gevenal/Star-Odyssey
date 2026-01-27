@@ -38,6 +38,11 @@ class PersonalityTraits(BaseModel):
         description="Notable personality quirks or habits",
         examples=[["quotes ancient texts", "counts things obsessively", "hums when nervous"]]
     )
+    speech_pattern: Optional[str] = Field(
+        default=None,
+        description="Speech pattern and communication style",
+        examples=["technical_dry", "casual_slang", "stutter_nervous", "cryptic", "formal_precise", "rapid_technical"]
+    )
 
     class Config:
         json_schema_extra = {
@@ -69,6 +74,16 @@ class NPCRelationship(BaseModel):
         default_factory=list,
         description="Key events that shaped this relationship",
         examples=[["saved my life during hull breach", "disagreed about evacuation priority"]]
+    )
+    secret_knowledge: List[str] = Field(
+        default_factory=list,
+        description="Secrets this NPC knows about the target",
+        examples=[["knows target sabotaged the ship", "knows target is hiding something"]]
+    )
+    voice_style: Optional[str] = Field(
+        default=None,
+        description="How this NPC speaks about/to the target",
+        examples=["speaks quickly, uses technical terms to mask anxiety", "formal and distant", "warm and friendly"]
     )
 
     def get_disposition(self) -> NPCDisposition:
@@ -178,10 +193,37 @@ class NPCState(BaseModel):
         description="Hidden agenda or motivation",
         examples=["wants to take command", "protecting someone", "seeking revenge"]
     )
+    hidden_agenda_type: Optional[str] = Field(
+        default=None,
+        description="Type of hidden agenda (from hidden_agendas.json)",
+        examples=["corporate_spy", "coward", "whistleblower", "loyalist", "survivor", "protector", "rebel", "researcher"]
+    )
+    hidden_agenda_conflicts_with_player: bool = Field(
+        default=False,
+        description="Whether this agenda conflicts with player goals"
+    )
     current_activity: Optional[str] = Field(
         default=None,
         description="What the NPC is currently doing",
         examples=["repairing reactor", "sleeping", "arguing with another crew member"]
+    )
+    breaking_point_threshold: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Stress level at which NPC breaks down (from template)"
+    )
+    breakdown_trait: Optional[str] = Field(
+        default=None,
+        description="Trait that manifests during breakdown"
+    )
+    breakdown_behavior: Optional[str] = Field(
+        default=None,
+        description="Description of breakdown behavior"
+    )
+    is_in_breakdown: bool = Field(
+        default=False,
+        description="Whether NPC is currently in breakdown state"
     )
 
     @field_validator("health")
@@ -203,6 +245,32 @@ class NPCState(BaseModel):
     def is_highly_stressed(self) -> bool:
         """Check if NPC is highly stressed."""
         return self.stress_level >= 75
+    
+    def is_in_panic(self) -> bool:
+        """Check if NPC has reached breaking point (stress >= threshold)."""
+        if self.breaking_point_threshold is None:
+            return False
+        return self.stress_level >= self.breaking_point_threshold
+    
+    def update_breakdown_state(self):
+        """Update breakdown state based on current stress level."""
+        if self.breaking_point_threshold is None:
+            self.is_in_breakdown = False
+            return
+        
+        was_in_breakdown = self.is_in_breakdown
+        self.is_in_breakdown = self.stress_level >= self.breaking_point_threshold
+        
+        # If just entered breakdown, log it
+        if self.is_in_breakdown and not was_in_breakdown:
+            # Breakdown state is now active
+            pass
+    
+    def get_breakdown_behavior_description(self) -> Optional[str]:
+        """Get description of breakdown behavior if in breakdown."""
+        if not self.is_in_breakdown:
+            return None
+        return self.breakdown_behavior
 
     def get_player_disposition(self) -> NPCDisposition:
         """Get NPC's disposition toward player."""

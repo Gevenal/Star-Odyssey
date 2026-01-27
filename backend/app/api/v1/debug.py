@@ -1,5 +1,6 @@
 """Debug endpoints (development only)."""
 
+import json
 from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.config import settings
@@ -10,6 +11,14 @@ from app.api.schemas import (
     DebugExplainRisksResponse,
 )
 from app.api.deps import get_session_manager, get_gemini_client, get_game_loop
+from app.core.game_state_manager import GameStateManager
+from app.utils.state_converter import StateConverter
+from app.ai.prompts.debug_prompt import (
+    build_debug_risk_analysis_prompt,
+    extract_immediate_threats,
+    extract_medium_term_risks,
+    extract_long_term_concerns,
+)
 
 router = APIRouter()
 
@@ -230,34 +239,74 @@ async def explain_risks(
         HTTPException 403: If not in development mode
         HTTPException 404: If session not found
     """
-    # TODO: Implement risk analysis
-    # game_state = await game_loop.get_state(session_id)
-    # if not game_state:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail=f"Session {session_id} not found"
-    #     )
-
-    # analysis_prompt = build_risk_analysis_prompt(game_state)
-    # risk_analysis = await gemini_client.generate_narration(analysis_prompt)
-
-    # immediate_threats = extract_immediate_threats(game_state)
-    # medium_term_risks = extract_medium_term_risks(game_state)
-    # long_term_concerns = extract_long_term_concerns(game_state)
-    # recommended_actions = await get_recommended_actions(game_state)
-
-    # return DebugExplainRisksResponse(
-    #     session_id=session_id,
-    #     risk_analysis=risk_analysis,
-    #     immediate_threats=immediate_threats,
-    #     medium_term_risks=medium_term_risks,
-    #     long_term_concerns=long_term_concerns,
-    #     recommended_actions=recommended_actions
-    # )
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Risk analysis not yet implemented"
+    # Get game state
+    try:
+        state_data = await game_loop.state_manager.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    # Convert to GameState model
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    snapshot = gs.get_snapshot()
+    game_state = StateConverter.snapshot_to_game_state(snapshot, session_id)
+    
+    # Build analysis prompt
+    analysis_prompt = build_debug_risk_analysis_prompt(game_state)
+    
+    # Get AI analysis
+    try:
+        ai_response_text = await gemini_client.generate(
+            prompt=analysis_prompt,
+            model="pro",
+            temperature=0.7
+        )
+        
+        # Parse JSON response
+        # Try to extract JSON from markdown code blocks if present
+        if "```json" in ai_response_text:
+            json_start = ai_response_text.find("```json") + 7
+            json_end = ai_response_text.find("```", json_start)
+            ai_response_text = ai_response_text[json_start:json_end].strip()
+        elif "```" in ai_response_text:
+            json_start = ai_response_text.find("```") + 3
+            json_end = ai_response_text.find("```", json_start)
+            ai_response_text = ai_response_text[json_start:json_end].strip()
+        
+        ai_analysis = json.loads(ai_response_text)
+        
+        top_3_risks = ai_analysis.get("top_3_risks", [])
+        hidden_cascades = ai_analysis.get("hidden_cascades", [])
+        misleading_metrics = ai_analysis.get("misleading_metrics", [])
+        recommended_actions = ai_analysis.get("recommended_actions", [])
+        
+    except Exception as e:
+        # Fallback to rule-based extraction if AI fails
+        top_3_risks = extract_immediate_threats(game_state)[:3]
+        hidden_cascades = []
+        misleading_metrics = []
+        recommended_actions = []
+        ai_response_text = f"AI analysis failed: {str(e)}. Using rule-based extraction."
+    
+    # Combine AI analysis with rule-based extraction
+    immediate_threats = extract_immediate_threats(game_state)
+    medium_term_risks = extract_medium_term_risks(game_state)
+    long_term_concerns = extract_long_term_concerns(game_state)
+    
+    # Merge AI top_3_risks with immediate threats
+    if top_3_risks:
+        immediate_threats = list(set(immediate_threats + top_3_risks))[:5]
+    
+    return DebugExplainRisksResponse(
+        session_id=session_id,
+        risk_analysis=ai_response_text if 'ai_response_text' in locals() else "Analysis generated",
+        immediate_threats=immediate_threats,
+        medium_term_risks=medium_term_risks + hidden_cascades,
+        long_term_concerns=long_term_concerns + misleading_metrics,
+        recommended_actions=recommended_actions
     )
 
 
