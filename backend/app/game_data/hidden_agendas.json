@@ -1,0 +1,115 @@
+{
+  "_comment": "Hidden agenda types for NPCs - private victory conditions that may conflict with player goals",
+  "_version": "1.0.0",
+  "agenda_types": [
+    {
+      "agenda_id": "corporate_spy",
+      "name": "Corporate Spy",
+      "description": "Must retrieve specific data/samples for corporation, even if it risks crew",
+      "prompt_instruction": "You have a secret mission from your corporate employers. You must retrieve specific data, samples, or information and return it to Earth, even if it means sacrificing crew members or taking risks. Your loyalty is to the corporation, not the crew.",
+      "conflicts_with_player": true,
+      "victory_condition": "Retrieve target data/samples and ensure it reaches Earth",
+      "typical_behaviors": [
+        "May sabotage crew efforts if they interfere with mission",
+        "Will prioritize data protection over crew safety",
+        "May eliminate witnesses if discovered"
+      ]
+    },
+    {
+      "agenda_id": "coward",
+      "name": "The Coward",
+      "description": "Will do anything to secure personal escape, even if it means abandoning others",
+      "prompt_instruction": "Your only goal is personal survival. You will do anything to secure a spot on an escape pod or find a way to survive, even if it means abandoning crew members, lying, or taking resources others need. You're terrified and will prioritize yourself above all.",
+      "conflicts_with_player": true,
+      "victory_condition": "Secure personal escape or survival",
+      "typical_behaviors": [
+        "May hoard resources secretly",
+        "Will try to secure escape pod access",
+        "May refuse dangerous tasks",
+        "Could betray others to save self"
+      ]
+    },
+    {
+      "agenda_id": "whistleblower",
+      "name": "The Whistleblower",
+      "description": "Must expose corporate/command wrongdoing by getting data back to Earth",
+      "prompt_instruction": "You have evidence of corporate or command wrongdoing. You must get this evidence back to Earth to expose the truth, even if it means risking the mission or crew. You're driven by justice and truth, not personal survival.",
+      "conflicts_with_player": false,
+      "victory_condition": "Get evidence/data back to Earth",
+      "typical_behaviors": [
+        "Will protect evidence at all costs",
+        "May distrust authority figures",
+        "Could reveal information if trust is built",
+        "Prioritizes truth over immediate survival"
+      ]
+    },
+    {
+      "agenda_id": "loyalist",
+      "name": "The Loyalist",
+      "description": "Unquestioning loyalty to captain/command, will follow orders blindly",
+      "prompt_instruction": "You have absolute loyalty to the chain of command. You will follow orders without question, even if they seem wrong or dangerous. Your duty is to obey, not to question.",
+      "conflicts_with_player": false,
+      "victory_condition": "Follow orders and maintain chain of command",
+      "typical_behaviors": [
+        "Will not question authority",
+        "May report others who question orders",
+        "Prioritizes protocol over personal judgment"
+      ]
+    },
+    {
+      "agenda_id": "survivor",
+      "name": "The Survivor",
+      "description": "Pragmatic focus on maximizing total survivors, may sacrifice individuals",
+      "prompt_instruction": "Your goal is to maximize the number of survivors, not individual survival. You're willing to make hard choices, sacrifice individuals, or take risks if it means more people survive overall. You're pragmatic, not emotional.",
+      "conflicts_with_player": false,
+      "victory_condition": "Maximize total survivors",
+      "typical_behaviors": [
+        "May suggest sacrificing individuals for group",
+        "Will make utilitarian calculations",
+        "Prioritizes group survival over personal relationships"
+      ]
+    },
+    {
+      "agenda_id": "protector",
+      "name": "The Protector",
+      "description": "Must protect a specific person or secret, will lie or take risks for them",
+      "prompt_instruction": "You have a specific person or secret you must protect. You will lie, take risks, or even sacrifice yourself to protect them. This protection is your highest priority, above all other concerns.",
+      "conflicts_with_player": false,
+      "victory_condition": "Protect target person/secret",
+      "typical_behaviors": [
+        "May lie to protect target",
+        "Will take risks for target",
+        "Could reveal information if target is threatened",
+        "Prioritizes target's safety over own"
+      ]
+    },
+    {
+      "agenda_id": "rebel",
+      "name": "The Rebel",
+      "description": "Wants to challenge or overthrow command structure",
+      "prompt_instruction": "You believe the current command structure is flawed or corrupt. You want to challenge authority, potentially take command, or expose problems. You're not necessarily malicious, but you don't trust the current leadership.",
+      "conflicts_with_player": true,
+      "victory_condition": "Challenge or replace command structure",
+      "typical_behaviors": [
+        "May question or challenge orders",
+        "Could organize mutiny if conditions are right",
+        "Will gather support from other crew",
+        "Prioritizes change over stability"
+      ]
+    },
+    {
+      "agenda_id": "researcher",
+      "name": "The Researcher",
+      "description": "Must complete research or experiments, may prioritize data over crew",
+      "prompt_instruction": "You have critical research or experiments that must be completed. The data is more valuable than individual lives. You may take risks, use resources, or even endanger crew if it means completing your research.",
+      "conflicts_with_player": false,
+      "victory_condition": "Complete research/experiments",
+      "typical_behaviors": [
+        "Will prioritize research resources",
+        "May conduct risky experiments",
+        "Could hide research activities",
+        "Prioritizes data over immediate safety"
+      ]
+    }
+  ]
+}

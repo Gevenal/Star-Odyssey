@@ -12,10 +12,9 @@ from app.api.schemas import (
 from app.models.action import ActionDefinition, PlayerAction
 from app.models.response import GameActionResponse
 from app.models.game_state import GameState
-from app.core.game_state_manager import GameStateManager
 from app.core.session_state_manager import SessionStateManager
-from app.utils.state_converter import StateConverter  # 👈 唯一新增的 import
-from app.api.deps import get_session_manager
+from app.utils.state_converter import StateConverter
+from app.api.deps import get_session_manager, get_game_loop
 import json
 from pathlib import Path
 from pydantic import ValidationError
@@ -88,7 +87,7 @@ async def start_game(
 )
 async def submit_action(
     action: PlayerAction,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
+    game_loop=Depends(get_game_loop),
 ) -> GameActionResponse:
     # 1) Load snapshot (doc["state"])
     try:
@@ -376,7 +375,7 @@ async def get_available_actions(
 )
 async def end_turn(
     session_id: str,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
+    game_loop=Depends(get_game_loop),
 ) -> TurnEndResponse:
     # 1) Load snapshot
     try:

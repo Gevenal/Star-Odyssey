@@ -1,5 +1,6 @@
 {
   "_version": "1.0.0",
+  "_comment": "State variables for game resources and systems. NPC relationships are maintained in game state under npcs.{npc_id}.relationships",
   "variables": [
     {
       "variable_path": "world.resources.oxygen_level.current",
@@ -56,5 +57,47 @@
       "critical_threshold": 10.0,
       "decay_rate": 0.0
     }
-  ]
+  ],
+  "_comment_relationships": "Initial relationship seeds - these define preset relationships between NPCs that will be used when generating the crew. If a relationship is not specified here, it will be randomly generated.",
+  "npc_relationships": {
+    "Captain Elena Chen": {
+      "Dr. Aris Ashford": -20,
+      "secret_knowledge": ["Suspects Ashford may have sent unauthorized distress beacon"],
+      "voice_style": "Speaks with authority, uses formal language when discussing Ashford"
+    },
+    "Dr. Aris Ashford": {
+      "Captain Elena Chen": -20,
+      "Dr. Takashi Nakamura": 15,
+      "secret_knowledge": ["Knows Chen is willing to sacrifice individuals for the majority"],
+      "voice_style": "Defensive and technical when around Chen, more relaxed with Nakamura"
+    },
+    "Marcus \"Wrench\" Okafor": {
+      "Commander James Okoro": 25,
+      "Dr. Yuki Tanaka": 10,
+      "secret_knowledge": ["Has evidence about sabotage but fears retaliation"],
+      "voice_style": "Cautious, uses technical jargon to mask anxiety"
+    },
+    "Dr. Yuki Tanaka": {
+      "Specialist Kim Rivera": 20,
+      "voice_style": "Warm and empathetic, especially with Rivera"
+    },
+    "Ambassador Sofia Volkov": {
+      "Captain Elena Chen": 10,
+      "voice_style": "Diplomatic and measured, maintains professional distance"
+    },
+    "Commander James Okoro": {
+      "Marcus \"Wrench\" Okafor": 25,
+      "Dr. Aris Ashford": -15,
+      "secret_knowledge": ["Suspects Ashford of being responsible for the disaster"],
+      "voice_style": "Direct and confrontational, especially when suspicious"
+    },
+    "Specialist Kim Rivera": {
+      "Dr. Yuki Tanaka": 20,
+      "voice_style": "Anxious, stutters when stressed, speaks quickly"
+    },
+    "Dr. Takashi Nakamura": {
+      "Dr. Aris Ashford": 15,
+      "voice_style": "Rapid technical speech, uses jargon frequently, especially when nervous"
+    }
+  }
 }

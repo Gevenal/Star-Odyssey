@@ -110,6 +110,10 @@ class StateVariablesConfig(BaseModel):
         ...,
         description="Variable definitions"
     )
+    npc_relationships: Optional[Dict[str, Dict[str, Any]]] = Field(
+        default=None,
+        description="Initial relationship seeds between NPCs. Format: {\"NPC Name\": {\"Other NPC Name\": trust_level, \"secret_knowledge\": [...], \"voice_style\": \"...\"}}"
+    )
 
 
 class ActionRequirementConfig(BaseModel):
@@ -253,9 +257,25 @@ class NPCTemplateConfig(BaseModel):
         description="NPC secrets"
     )
     hidden_agenda: Optional[str] = Field(None, description="Hidden agenda")
+    hidden_agenda_type: Optional[str] = Field(None, description="Type of hidden agenda")
+    hidden_agenda_conflicts_with_player: bool = Field(
+        default=False,
+        description="Whether agenda conflicts with player goals"
+    )
     starting_inventory: List[str] = Field(
         default_factory=list,
         description="Starting items"
+    )
+    breaking_point: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Stress breakdown configuration"
+    )
+    is_ai: bool = Field(default=False, description="Whether this is an AI entity")
+    sentience_level: Optional[int] = Field(
+        None,
+        ge=0,
+        le=100,
+        description="AI sentience level (0-100, only for AI entities)"
     )
 
 

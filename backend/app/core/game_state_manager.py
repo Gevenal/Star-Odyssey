@@ -3,9 +3,15 @@ Game State Manager - In-Memory Game State Operations
 Responsible for reading, writing, and validating game state
 """
 import json
+import re
 from typing import Any, Dict, Optional
 from pathlib import Path
 from copy import deepcopy
+
+
+def _default_game_data_dir() -> str:
+    """Resolve app/game_data relative to this file (app/core/)."""
+    return str((Path(__file__).parent.parent / "game_data").resolve())
 
 
 class GameStateManager:
@@ -44,16 +50,33 @@ class GameStateManager:
 
         self.state_config = self._load_json("state_variables.json")
         self.world_config = self._load_json("world_config.json")
+        
+        # Initialize current state
         self.state = self._initialize_state()
+        
+        # Turn history (for AI context)
         self.turn_history = []
-    
+
     def _load_json(self, filename: str) -> Dict:
-        """Load JSON configuration file"""
+        """Load JSON configuration file; returns {} if file not found."""
         filepath = self.config_dir / filename
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
     
     def _initialize_state(self) -> Dict:
+        """
+        Initialize game state from state_variables.json and world_config.json.
+
+        - state_variables: expects "variables": [{"variable_path":"world.resources.X.current","initial_value":...}]
+        - world_config: expects top-level "locations": {id: {name, connected_to, default_atmosphere, ...}}
+          and "game_settings": {"starting_location": "..."}
+        """
+        game_settings = self.world_config.get("game_settings", {})
+        starting_location = game_settings.get("starting_location", "command_bridge")
+
         state = {
             "game_meta": {
                 "current_turn": 0,
@@ -61,7 +84,7 @@ class GameStateManager:
                 "current_hour": 0,
                 "game_phase": "intro",
                 "started_at": None,
-                "last_updated": None
+                "last_updated": None,
             },
 
             # ✅ 新结构：world 下挂资源/系统（匹配 state_variables.json 的 variable_path）

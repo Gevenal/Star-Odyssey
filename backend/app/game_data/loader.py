@@ -92,6 +92,17 @@ class GameDataLoader:
         config = StateVariablesConfig(**data)
         self._cache[cache_key] = config
         return config
+    
+    def get_npc_initial_relationships(self) -> Optional[Dict[str, Dict[str, Any]]]:
+        """
+        Get initial NPC relationship seeds from state_variables.json.
+        
+        Returns:
+            Dict with initial relationships, or None if not configured
+            Format: {"NPC Name": {"Other NPC Name": trust_level, "secret_knowledge": [...], ...}}
+        """
+        state_vars = self.load_state_variables()
+        return state_vars.npc_relationships
 
     def load_player_actions(self) -> Dict[str, ActionConfig]:
         """
@@ -201,6 +212,24 @@ class GameDataLoader:
         library = AIPromptLibrary(**data)
         self._cache[cache_key] = library
         return library
+    
+    def load_oracle_constraints(self) -> Dict[str, Any]:
+        """
+        Load oracle_constraints.json.
+
+        Returns:
+            Dict: Oracle constraints configuration
+
+        Raises:
+            FileNotFoundError: If file doesn't exist
+        """
+        cache_key = "oracle_constraints"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        data = self._load_json("oracle_constraints.json")
+        self._cache[cache_key] = data
+        return data
 
     def get_all(self) -> GameDataBundle:
         """

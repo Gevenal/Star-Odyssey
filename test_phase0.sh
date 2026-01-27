@@ -226,7 +226,7 @@ echo ""
 # Test 8: MongoDB Data Verification
 # ===================================
 echo "📋 Test 8: MongoDB Data Persistence"
-MONGO_COUNT=$(docker-compose exec -T mongodb mongosh --quiet --eval "db.getSiblingDB('ai_rpg_game').sessions.countDocuments()" 2>/dev/null | tail -1)
+MONGO_COUNT=$(docker-compose exec -T mongodb mongosh --quiet --eval "db.getSiblingDB('odyssey7').sessions.countDocuments()" 2>/dev/null | tail -1)
 
 if [ -n "$MONGO_COUNT" ] && [ "$MONGO_COUNT" -gt 0 ]; then
     print_result 0 "MongoDB data exists - $MONGO_COUNT session(s)"

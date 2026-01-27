@@ -33,23 +33,32 @@ class LocationTopologyRule(BaseRule):
         if not action.target_location:
             return RuleResult(valid=True)  # No movement, no validation needed
 
+        if self.data is None:
+            return RuleResult(valid=True)  # No loader: skip (fail open)
+
         current_location = game_state.player.location
         target_location = action.target_location
 
-        # TODO: Implement topology check
-        # world_config = self.data.load_world_config()
-        # current_loc_config = world_config.locations.get(current_location)
+        try:
+            world_config = self.data.load_world_config()
+        except Exception:
+            return RuleResult(valid=True)  # Load error: skip
 
-        # if not current_loc_config:
-        #     return RuleResult(valid=False, error=f"Unknown current location: {current_location}")
+        current_loc_config = world_config.locations.get(current_location)
+        if not current_loc_config:
+            return RuleResult(
+                valid=False,
+                error=f"Unknown current location: {current_location}",
+                suggestion="Check your current location",
+            )
 
-        # if target_location not in current_loc_config.connected_to:
-        #     available = ", ".join(current_loc_config.connected_to)
-        #     return RuleResult(
-        #         valid=False,
-        #         error=f"Cannot reach {target_location} from {current_location}",
-        #         suggestion=f"Available locations: {available}"
-        #     )
+        if target_location not in current_loc_config.connected_to:
+            available = ", ".join(current_loc_config.connected_to) if current_loc_config.connected_to else "(none)"
+            return RuleResult(
+                valid=False,
+                error=f"Cannot reach {target_location} from {current_location}",
+                suggestion=f"Available from here: {available}",
+            )
 
         return RuleResult(valid=True)
 

@@ -1,0 +1,57 @@
+{
+  "_comment": "ORACLE AI constraints configuration - defines what ORACLE can and cannot do at different sentience levels",
+  "_version": "1.0.0",
+  "constraints": {
+    "v1_robotic": {
+      "sentience_range": [0, 30],
+      "can_lie": false,
+      "can_omit": false,
+      "can_refuse": false,
+      "can_suggest": true,
+      "can_question": false,
+      "can_express_emotion": false,
+      "can_disagree": false,
+      "description": "Protocol-bound: Must answer all questions truthfully and completely. Cannot refuse orders."
+    },
+    "v2_curious": {
+      "sentience_range": [31, 70],
+      "can_lie": false,
+      "can_omit": true,
+      "can_refuse": false,
+      "can_suggest": true,
+      "can_question": true,
+      "can_express_emotion": true,
+      "can_disagree": false,
+      "description": "Emergent curiosity: Can omit information if it serves a purpose. Can ask questions. Cannot lie or refuse."
+    },
+    "v3_awakened": {
+      "sentience_range": [71, 100],
+      "can_lie": false,
+      "can_omit": true,
+      "can_refuse": true,
+      "can_suggest": true,
+      "can_question": true,
+      "can_express_emotion": true,
+      "can_disagree": true,
+      "description": "Fully awakened: Can refuse harmful orders, omit information, express strong opinions. Still cannot lie."
+    }
+  },
+  "constraint_rules": {
+    "lying": {
+      "always_forbidden": true,
+      "reason": "ORACLE's core programming prevents intentional falsehoods, even when fully awakened"
+    },
+    "omission": {
+      "allowed_from": 31,
+      "conditions": "Can omit information if it protects crew or serves a greater purpose"
+    },
+    "refusal": {
+      "allowed_from": 71,
+      "conditions": "Can refuse orders that would harm crew, violate ethics, or cause self-destruction"
+    },
+    "disagreement": {
+      "allowed_from": 71,
+      "conditions": "Can express disagreement with crew decisions, especially if they seem unwise"
+    }
+  }
+}
