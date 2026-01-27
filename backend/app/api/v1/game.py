@@ -1,6 +1,6 @@
 """Game session endpoints."""
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from app.api.schemas import (
@@ -9,13 +9,16 @@ from app.api.schemas import (
     AvailableActionsResponse,
     TurnEndResponse,
 )
-from app.models.action import PlayerAction
+from app.models.action import ActionDefinition, PlayerAction
 from app.models.response import GameActionResponse
 from app.models.game_state import GameState
 from app.core.game_state_manager import GameStateManager
 from app.core.session_state_manager import SessionStateManager
 from app.utils.state_converter import StateConverter  # 👈 唯一新增的 import
 from app.api.deps import get_session_manager
+import json
+from pathlib import Path
+from pydantic import ValidationError
 
 router = APIRouter()
 
@@ -87,78 +90,69 @@ async def submit_action(
     action: PlayerAction,
     session_mgr: SessionStateManager = Depends(get_session_manager)
 ) -> GameActionResponse:
-    """
-    Submit a player action (non-streaming response).
-
-    - Validates action against current game rules
-    - Processes action through game loop
-    - Applies state changes
-    - Generates AI narration
-    - Triggers NPC reactions
-    - Checks for ending conditions
-
-    Args:
-        action: Player action with session_id and action details
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        GameActionResponse with narration and all state changes
-
-    Raises:
-        HTTPException 404: If session not found
-        HTTPException 400: If action is invalid
-        HTTPException 409: If game has ended
-    """
-    # 1. Load state from database
+    # 1) Load snapshot (doc["state"])
     try:
-        state_data = await session_mgr.get_state(action.session_id)
+        snapshot = await session_mgr.get_state(action.session_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session {action.session_id} not found"
         )
-    
-    # 2. Instantiate GameStateManager (in-memory)
-    game_state = GameStateManager()
-    game_state.load_snapshot(state_data)
-    
-    # Check if game has ended
-    game_over = game_state.get("game_meta.game_phase") == "ending"
-    if game_over:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Game has ended"
-        )
-    
-    # 3. TODO Phase 1: Create GameLoop and process action
-    # For now, simulate state changes
-    game_state.modify("resources.oxygen_level.current", -2.5)
-    game_state.increment_turn()
-    
-    # TODO Phase 1: AI narration generation
-    narration = [
-        f"[System] Oxygen level decreased by 2.5%",
-        f"[Player] Executed action: {action.action_type}"
+
+    # 2) Build GSM and load snapshot (NO wrapping)
+    config_dir = Path(__file__).resolve().parents[2] / "game_data"  # app/game_data
+    gsm = GameStateManager(config_dir=str(config_dir))
+    gsm.load_snapshot(snapshot)
+
+    # 3) Guard: ended?
+    if gsm.get("game_meta.game_phase") == "ending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Game has ended")
+
+    # 4) Apply minimal action effect (Phase 1 stub)
+    new_oxygen = _apply_oxygen_delta(gsm, -2.5)
+    gsm.increment_turn()
+
+    # 5) Save snapshot back
+    new_snapshot = gsm.get_snapshot()
+    ok = await session_mgr.update_state(action.session_id, new_snapshot)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to save game state")
+
+    # 6) Response (保持你原有字段)
+    narration_lines = [
+        f"[System] Oxygen is now {new_oxygen:.1f}",
+        f"[Player] action_id: {action.action_id}",
+        f"[Player] action_text: {action.action_text}",
     ]
-    
-    # 4. Save back to database
-    snapshot = game_state.get_snapshot()
-    save_success = await session_mgr.update_state(action.session_id, snapshot)
-    
-    # 5. Return results
-    # 👇 保持原有的返回格式
+
     return GameActionResponse(
-        success=True,  # 👈 添加这个字段（GameActionResponse 需要）
-        narration="\n".join(narration),  # 👈 修改：从 list 改为 string
-        resource_changes=[],  # 👈 添加这个字段
-        state_changes=[],  # 👈 添加这个字段
-        npc_reactions=[],  # 👈 添加这个字段
-        available_actions=["explore_bridge", "check_systems"],
+        success=True,
+        narration="\n".join(narration_lines),
+        resource_changes=[],
+        state_changes=[],
+        npc_reactions=[],
+        available_actions=["explore_location", "talk_to_npc", "rest", "check_systems"],
         mood="tense",
-        trigger_ending=False,  # 👈 添加这个字段
-        ending_id=None  # 👈 添加这个字段
+        trigger_ending=False,
+        ending_id=None,
+        oracle_message=None,
+        confidence_level="high",
     )
 
+
+
+def _apply_oxygen_delta(gsm: GameStateManager, delta: float) -> float:
+    """Apply oxygen delta to GSM internal schema and clamp at 0. Return new value."""
+    cur = gsm.get("world.resources.oxygen_level.current", 0.0)
+    new_val = max(0.0, float(cur) - 2.5)
+    if not isinstance(cur, (int, float)):
+        # 如果当前结构被污染了，直接重置成 0 再算
+        cur = 0.0
+        gsm.set("world.resources.oxygen_level", cur, validate=False)
+
+    new_val = max(0.0, float(cur) + float(delta))
+    gsm.set("world.resources.oxygen_level.current", new_val, validate=False)
+    return new_val
 
 @router.post(
     "/action/stream",
@@ -219,41 +213,17 @@ async def submit_action_stream(
     )
 
 
-@router.get(
-    "/state/{session_id}",
-    response_model=GameState,  # 👈 修改：添加明确的返回类型
-    summary="Get game state",
-    description="Retrieve the current complete game state for a session."
-)
-async def get_game_state(
-    session_id: str,
-    session_mgr: SessionStateManager = Depends(get_session_manager)
-) -> GameState:  # 👈 修改：添加返回类型注解
-    """
-    Get current game state for a session.
-
-    Args:
-        session_id: Game session identifier
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        Complete game state (as GameState model for type safety)
-
-    Raises:
-        HTTPException 404: If session not found
-    """
+@router.get("/state/{session_id}")
+async def get_game_state(session_id: str, session_mgr: SessionStateManager = Depends(get_session_manager)):
     try:
         state_data = await session_mgr.get_state(session_id)
-        
-        # 👇 新增：Convert to GameState model
-        game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
-        
-        return game_state  # 👈 修改：返回 GameState 对象而不是字典
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session {session_id} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    try:
+        return StateConverter.snapshot_to_game_state(state_data, session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"StateConverter failed: {type(e).__name__}: {e}")
 
 
 @router.get(
@@ -266,45 +236,135 @@ async def get_available_actions(
     session_id: str,
     session_mgr: SessionStateManager = Depends(get_session_manager)
 ) -> AvailableActionsResponse:
-    """
-    Get list of currently available actions.
-
-    Filters actions based on:
-    - Player location
-    - Player inventory
-    - Resource levels
-    - NPC presence
-    - Quest/flag states
-    - Action cooldowns
-
-    Args:
-        session_id: Game session identifier
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        AvailableActionsResponse with actions, hints, and urgent action IDs
-
-    Raises:
-        HTTPException 404: If session not found
-    """
-    # Verify session exists
+    # 1) Load snapshot
     try:
-        state_data = await session_mgr.get_state(session_id)
+        snapshot = await session_mgr.get_state(session_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session {session_id} not found"
         )
-    
-    # TODO Phase 1: Implement action filtering based on game state
-    # For now, return basic actions
+
+    # 2) Normalize state
+    state = snapshot.get("state", snapshot)
+    player = state.get("player", {})
+    world = state.get("world", {})
+
+    player_loc = player.get("location", "cryo_bay")
+    phase = state.get("phase", state.get("game_meta", {}).get("game_phase", "intro"))
+
+    # 3) Load action definitions
+    game_data_dir = Path(__file__).resolve().parents[2] / "game_data"
+    actions_file = game_data_dir / "player_actions.json"
+
+    actions: list[ActionDefinition] = []
+    action_ids: list[str] = []  # 用于 urgent_actions / 去重
+
+    def _location_requirement_allows(req_loc: str | None) -> bool:
+        if not req_loc:
+            return True
+
+        if req_loc == player_loc:
+            return True
+        if req_loc in player_loc or player_loc in req_loc:
+            return True
+
+        # intro 特例
+        if phase == "intro" and req_loc == "command_bridge":
+            return True
+
+        return False
+
+    if actions_file.exists():
+        try:
+            data = json.loads(actions_file.read_text(encoding="utf-8"))
+            raw_actions = data.get("actions", []) if isinstance(data, dict) else []
+
+            for a in raw_actions:
+                if not isinstance(a, dict):
+                    continue
+
+                action_id = a.get("id")
+                if not action_id:
+                    continue
+
+                req = a.get("requirements", {}) or {}
+                req_loc = req.get("location")
+
+                # location filter（兼容 string / list）
+                if isinstance(req_loc, list):
+                    if req_loc and not any(_location_requirement_allows(x) for x in req_loc if isinstance(x, str)):
+                        continue
+                else:
+                    if not _location_requirement_allows(req_loc if isinstance(req_loc, str) else None):
+                        continue
+
+                # ✅ 关键：把 dict 转成 ActionDefinition（而不是把 id 字符串塞进 actions）
+                try:
+                    action_def = ActionDefinition.model_validate(a)
+                except ValidationError:
+                    # 如果 JSON 某条 action 缺字段导致校验失败，就跳过这一条，避免整个接口 500
+                    continue
+
+                actions.append(action_def)
+                action_ids.append(action_id)
+
+        except Exception:
+            actions = []
+            action_ids = []
+
+    # 4) Fallback：如果 JSON 过滤后为空，至少给基础动作
+    if not actions:
+        # ⚠️ 这里的字段要匹配你 ActionDefinition 的必填项
+        DEFAULT_ACTION_DEFS: list[dict] = [
+            {"id": "explore_location", "name": "Explore", "description": "Explore the current area."},
+            {"id": "talk_to_npc", "name": "Talk", "description": "Talk to someone nearby."},
+            {"id": "rest", "name": "Rest", "description": "Take a short rest."},
+        ]
+        if phase == "intro":
+            DEFAULT_ACTION_DEFS.append(
+                {"id": "check_systems", "name": "Check Systems", "description": "Review ship systems."}
+            )
+
+        actions = [ActionDefinition.model_validate(x) for x in DEFAULT_ACTION_DEFS]
+        action_ids = [x["id"] for x in DEFAULT_ACTION_DEFS]
+
+    # 5) Hints / urgent actions
+    context_hints: list[str] = []
+    urgent_actions: list[str] = []
+
+    oxygen = world.get("resources", {}).get("oxygen_level", {}).get("current")
+    oxygen_critical = world.get("resources", {}).get("oxygen_level", {}).get("critical_threshold", 20)
+
+    if isinstance(oxygen, (int, float)):
+        if oxygen <= oxygen_critical:
+            context_hints.append("Oxygen is critical — you must address life support NOW.")
+            if "check_systems" in action_ids:
+                urgent_actions.append("check_systems")
+        else:
+            context_hints.append("Oxygen is dropping — check life support soon.")
+
+    context_hints.append("ORACLE seems to have more information to share.")
+
+    # 6) 去重（按 id 保序）
+    seen = set()
+    dedup_actions: list[ActionDefinition] = []
+    for a in actions:
+        aid = getattr(a, "id", None)
+        if not aid or aid in seen:
+            continue
+        seen.add(aid)
+        dedup_actions.append(a)
+    actions = dedup_actions
+
+    # urgent_actions 去重并确保存在于 actions
+    valid_ids = {a.id for a in actions}
+    urgent_actions = [x for x in dict.fromkeys(urgent_actions) if x in valid_ids]
+
     return AvailableActionsResponse(
-        actions=[],  # TODO: Parse from player_actions.json based on state
-        context_hints=[
-            "The oxygen levels are dropping - you should check life support",
-            "ORACLE seems to have more information to share"
-        ],
-        urgent_actions=[]  # TODO: Determine based on resource levels
+        actions=actions,
+        context_hints=context_hints,
+        urgent_actions=urgent_actions
     )
 
 
@@ -318,62 +378,45 @@ async def end_turn(
     session_id: str,
     session_mgr: SessionStateManager = Depends(get_session_manager)
 ) -> TurnEndResponse:
-    """
-    Manually end current turn and advance game state.
-
-    Executes in order:
-    1. World update (resource decay, system degradation)
-    2. Random event generation and processing
-    3. NPC autonomous actions
-    4. Ending condition checks
-
-    Args:
-        session_id: Game session identifier
-        session_mgr: Session state manager (injected)
-
-    Returns:
-        TurnEndResponse with events, NPC actions, and state summary
-
-    Raises:
-        HTTPException 404: If session not found
-        HTTPException 409: If game has ended
-    """
-    # Load state
+    # 1) Load snapshot
     try:
-        state_data = await session_mgr.get_state(session_id)
+        snapshot = await session_mgr.get_state(session_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session {session_id} not found"
         )
-    
-    # Check if game has ended
-    game_state = GameStateManager()
-    game_state.load_snapshot(state_data)
-    
-    if game_state.get("game_meta.game_phase") == "ending":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Game has ended"
-        )
-    
-    # TODO Phase 1: Implement turn advancement with GameLoop
-    # For now, simulate basic turn changes
-    game_state.modify("resources.oxygen_level.current", -2.5)
-    game_state.increment_turn()
-    
-    # Save state
-    snapshot = game_state.get_snapshot()
-    await session_mgr.update_state(session_id, snapshot)
-    
+
+    # 2) Build GSM and load snapshot (NO wrapping)
+    config_dir = Path(__file__).resolve().parents[2] / "game_data"
+    gsm = GameStateManager(config_dir=str(config_dir))
+    gsm.load_snapshot(snapshot)
+
+    # 3) Guard: ended?
+    if gsm.get("game_meta.game_phase") == "ending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Game has ended")
+
+    # 4) Turn tick (Phase 1 stub)
+    before = gsm.get("world.resources.oxygen_level.current", 0)
+    after = max(0.0, float(before) - 2.5)
+    gsm.set("world.resources.oxygen_level.current", after, validate=False)
+    gsm.increment_turn()
+
+    # 5) Save snapshot back
+    new_snapshot = gsm.get_snapshot()
+    ok = await session_mgr.update_state(session_id, new_snapshot)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to save game state")
+
+    # 6) Response
     return TurnEndResponse(
-        events_occurred=[],  # TODO Phase 1
-        npc_actions_taken=[],  # TODO Phase 1
+        events_occurred=[],
+        npc_actions_taken=[],
         state_summary={
-            "resources_changed": ["oxygen_level: -2.5"],
-            "turn_advanced": True
+            "resources_changed": [f"oxygen_level: {before} -> {after}"],
+            "turn_advanced": True,
         },
         narration="Time passes. The ship creaks ominously.",
-        critical_alerts=[],  # TODO: Check resource thresholds
-        turn_number=game_state.get("game_meta.current_turn")
+        critical_alerts=[],
+        turn_number=gsm.get("game_meta.current_turn"),
     )

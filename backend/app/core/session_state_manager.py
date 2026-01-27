@@ -170,8 +170,8 @@ class SessionStateManager:
             }
         )
         
-        if result.modified_count == 0:
-            print(f"[SessionManager] Warning: Session {session_id} not updated (maybe not found)")
+        if result.matched_count == 0:
+            print("not found")
             return False
         
         # Update cache

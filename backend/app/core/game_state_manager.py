@@ -26,7 +26,16 @@ class GameStateManager:
     
     from pathlib import Path
 
-    def __init__(self, config_dir: Optional[str] = None):
+    def __init__(self, config_dir: Optional[str] = None, skip_config: bool = False):
+        self.turn_history = []
+
+        if skip_config:
+            self.config_dir = None
+            self.state_config = {}
+            self.world_config = {}
+            self.state = {}
+            return
+        
         # app/ 目录
         app_dir = Path(__file__).resolve().parents[1]
         # app/game_data
@@ -45,80 +54,81 @@ class GameStateManager:
             return json.load(f)
     
     def _initialize_state(self) -> Dict:
-        """
-        Initialize game state from configuration files
-        
-        Based on state_variables.json and world_config.json
-        """
         state = {
-            # Metadata
             "game_meta": {
                 "current_turn": 0,
                 "current_day": 1,
-                "current_hour": 0,  # In-game time (0-168 hours, 7 days)
-                "game_phase": "intro",  # intro, playing, crisis, ending
+                "current_hour": 0,
+                "game_phase": "intro",
                 "started_at": None,
                 "last_updated": None
             },
-            
-            # Resources (read initial values from state_variables.json)
-            "resources": {},
-            
-            # Ship systems
-            "ship_systems": {},
-            
-            # Crew collective state
+
+            # ✅ 新结构：world 下挂资源/系统（匹配 state_variables.json 的 variable_path）
+            "world": {
+                "day": 1,
+                "turn": 1,
+                "time_of_day": "00:00",
+                "resources": {},
+                "ship_systems": {},
+                "location_states": {},
+                "crew_morale": 60,
+                "crew_cohesion": 70,
+                "panic_level": 25,
+                "global_flags": {},
+                "events_occurred": [],
+                "active_threats": []
+            },
+
             "crew_collective": {},
-            
-            # Mission progress
             "mission_progress": {},
-            
-            # Environmental threats
             "threats": {},
-            
-            # Special event flags
             "special_events": {},
-            
-            # Location states (read from world_config.json)
             "locations": {},
-            
-            # NPC states (filled later by NPC generator)
             "npcs": {},
-            
-            # Player state
+
+            # ✅ player 结构也对齐一下
             "player": {
                 "name": "",
                 "health": 100,
                 "stress": 0,
+                "radiation_exposure": 0,
                 "current_location": "command_bridge",
                 "inventory": [],
-                "known_secrets": [],
-                "completed_actions": []
+                "reputation": {},
+                "discovered_secrets": [],
+                "completed_actions": [],
+                "flags": {}
             }
         }
-        
-        # Fill resource initial values
-        if "state_variables" in self.state_config:
-            resources_config = self.state_config["state_variables"].get("resources", {})
-            for key, config in resources_config.items():
-                state["resources"][key] = config.get("current_value", 0)
-            
-            # Fill ship systems
-            systems_config = self.state_config["state_variables"].get("ship_systems", {})
-            for key, config in systems_config.items():
-                state["ship_systems"][key] = config.get("current_value", 0)
-            
-            # Fill crew state
-            crew_config = self.state_config["state_variables"].get("crew_collective", {})
-            for key, config in crew_config.items():
-                state["crew_collective"][key] = config.get("current_value", 50)
-            
-            # Fill mission progress
-            mission_config = self.state_config["state_variables"].get("mission_progress", {})
-            for key, config in mission_config.items():
-                state["mission_progress"][key] = config.get("current_value", False)
-        
-        # Fill location states
+
+        # ✅ 读你的 state_variables.json（variables 列表）
+        vars_list = []
+        if isinstance(self.state_config, dict):
+            vars_list = self.state_config.get("variables", []) or []
+
+        for v in vars_list:
+            if not isinstance(v, dict):
+                continue
+            path = v.get("variable_path")
+            if not isinstance(path, str) or not path:
+                continue
+
+            init_val = v.get("initial_value", 0)
+
+            # ✅ 按 variable_path 写入 state（支持 world.resources.xxx.current 这种）
+            self._set_by_path(state, path, init_val)
+
+            # ✅ 如果是 resource level，顺便补 max/min/critical/decay_rate（给 converter/未来逻辑用）
+            # 只对 ...current 这种末尾做扩展
+            if path.endswith(".current"):
+                base = path[:-len(".current")]
+                self._set_by_path(state, f"{base}.max", v.get("max_value", 100.0))
+                self._set_by_path(state, f"{base}.min", v.get("min_value", 0.0))
+                self._set_by_path(state, f"{base}.critical_threshold", v.get("critical_threshold", 20.0))
+                self._set_by_path(state, f"{base}.decay_rate", v.get("decay_rate", 0.0))
+
+        # locations 初始化你原来那段可以继续用（如果 world_config 里有）
         if "world_config" in self.world_config:
             locations = self.world_config["world_config"].get("locations", [])
             for loc in locations:
@@ -130,9 +140,19 @@ class GameStateManager:
                     "accessible": True,
                     "connected_to": loc.get("connected_to", [])
                 }
-        
+
         return state
-    
+
+
+    def _set_by_path(self, root: Dict[str, Any], path: str, value: Any):
+        keys = path.split(".")
+        cur = root
+        for k in keys[:-1]:
+            if k not in cur or not isinstance(cur[k], dict):
+                cur[k] = {}
+            cur = cur[k]
+        cur[keys[-1]] = value
+
     # ===== State Access Methods =====
     
     def get(self, path: str, default: Any = None) -> Any:
@@ -438,7 +458,9 @@ class GameStateManager:
         
         self.set("game_meta.current_day", day, validate=False)
         self.set("game_meta.current_hour", hour, validate=False)
-
+        self.set("world.day", day, validate=False)
+        self.set("world.time_of_day", f"{hour:02d}:00", validate=False)
+        self.set("world.turn", current_turn + 1, validate=False)  # 你想从1开始就 +1
 
 # ===== Usage Example =====
 if __name__ == "__main__":
