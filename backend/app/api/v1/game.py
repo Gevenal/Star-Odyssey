@@ -37,7 +37,7 @@ async def start_game(
     Start a new game session.
 
     - Creates new game state with player name
-    - Generates initial NPCs with randomized personalities
+    - Generates initial NPCs with randomized personalities (via GameStateManager._initialize_state)
     - Initializes ship systems and resources
     - Returns session ID and opening narration
 
@@ -52,13 +52,22 @@ async def start_game(
         HTTPException: If game creation fails
     """
     # Create new session in database
+    # Note: NPCs are automatically generated during GameStateManager initialization
+    # (see GameStateManager._initialize_state() which calls NPCGenerator.generate_full_crew())
     session_id = await session_mgr.create_session(request.player_name)
     
-    # Load initial state
+    # Load initial state (NPCs should already be generated and included)
     state_data = await session_mgr.get_state(session_id)
     
-    # 👇 新增：Convert to GameState model for type safety
+    # Convert to GameState model for type safety
+    # This will include all generated NPCs in game_state.npcs
     game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    # Verify NPCs were generated (for debugging)
+    if not game_state.npcs:
+        print(f"[game.py] Warning: No NPCs found in initial state for session {session_id}")
+    else:
+        print(f"[game.py] Game started with {len(game_state.npcs)} NPCs: {list(game_state.npcs.keys())}")
     
     # TODO Phase 1: Generate opening narration with AI
     opening_narration = (

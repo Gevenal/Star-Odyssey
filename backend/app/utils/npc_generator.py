@@ -1,6 +1,6 @@
 """NPC generation with random personalities."""
 import random
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from app.models.npc import NPCState, PersonalityTraits, NPCRelationship, NPCSecret
 from app.game_data.schemas import NPCTemplateConfig, PersonalityTraitDefinition
 from app.utils.logger import get_logger

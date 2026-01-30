@@ -164,6 +164,53 @@ class GameStateManager:
                     "connected_to": loc.get("connected_to", [])
                 }
 
+        # ✅ 生成NPC
+        try:
+            from app.game_data.loader import GameDataLoader
+            from app.utils.npc_generator import NPCGenerator
+            
+            # 加载游戏数据
+            data_loader = GameDataLoader(data_dir=self.config_dir)
+            trait_pool_data = data_loader.load_personality_traits()
+            npc_templates = data_loader.load_npc_templates()
+            initial_relationships = data_loader.get_npc_initial_relationships()
+            
+            # 将traits列表转换为按category分组的字典
+            trait_pool_dict = {}
+            for trait in trait_pool_data.traits:
+                category = trait.category
+                if category not in trait_pool_dict:
+                    trait_pool_dict[category] = []
+                trait_pool_dict[category].append(trait)
+            
+            # 创建NPC生成器
+            generator = NPCGenerator(
+                trait_pool=trait_pool_dict,
+                npc_templates=npc_templates
+            )
+            
+            # 获取所有NPC角色ID（从模板中）
+            npc_roles = list(npc_templates.keys())
+            
+            # 生成完整船员
+            generated_npcs = generator.generate_full_crew(
+                roles=npc_roles,
+                initial_relationships=initial_relationships
+            )
+            
+            # 将NPC转换为字典格式并添加到state
+            for npc_id, npc in generated_npcs.items():
+                # 将Pydantic模型转换为字典
+                npc_dict = npc.model_dump()
+                state["npcs"][npc_id] = npc_dict
+            
+            print(f"[GameStateManager] Generated {len(generated_npcs)} NPCs")
+        except Exception as e:
+            import traceback
+            print(f"[GameStateManager] Warning: Failed to generate NPCs: {e}")
+            traceback.print_exc()
+            # 如果NPC生成失败，继续使用空的npcs字典
+
         return state
 
 

@@ -93,9 +93,41 @@ class StateConverter:
             return {}
         npcs: Dict[str, NPCState] = {}
         for npc_id, npc_data in npcs_dict.items():
-            # TODO：这里你可以先不构造完整 NPCState，先跳过/留空，保证 state 接口能跑
-            # 如果 NPCState 是必填很多字段，你就先 continue
-            continue
+            try:
+                # 如果npc_data已经是字典格式（从model_dump()来的），直接转换
+                if isinstance(npc_data, dict):
+                    # 确保personality字段是PersonalityTraits对象
+                    if "personality" in npc_data and isinstance(npc_data["personality"], dict):
+                        npc_data["personality"] = PersonalityTraits(**npc_data["personality"])
+                    
+                    # 确保relationships中的每个关系是NPCRelationship对象
+                    if "relationships" in npc_data and isinstance(npc_data["relationships"], dict):
+                        relationships = {}
+                        for rel_key, rel_data in npc_data["relationships"].items():
+                            if isinstance(rel_data, dict):
+                                relationships[rel_key] = NPCRelationship(**rel_data)
+                            else:
+                                relationships[rel_key] = rel_data
+                        npc_data["relationships"] = relationships
+                    
+                    # 确保secrets是NPCSecret对象列表
+                    if "secrets" in npc_data and isinstance(npc_data["secrets"], list):
+                        secrets = []
+                        for secret_data in npc_data["secrets"]:
+                            if isinstance(secret_data, dict):
+                                secrets.append(NPCSecret(**secret_data))
+                            else:
+                                secrets.append(secret_data)
+                        npc_data["secrets"] = secrets
+                    
+                    # 创建NPCState对象
+                    npcs[npc_id] = NPCState(**npc_data)
+                elif isinstance(npc_data, NPCState):
+                    # 如果已经是NPCState对象，直接使用
+                    npcs[npc_id] = npc_data
+            except Exception as e:
+                print(f"[StateConverter] Warning: Failed to convert NPC {npc_id}: {e}")
+                continue
         return npcs
 
     @staticmethod
