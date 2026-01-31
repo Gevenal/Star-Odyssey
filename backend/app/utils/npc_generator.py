@@ -209,7 +209,7 @@ class NPCGenerator:
 
     def _generate_personality(self, template: NPCTemplateConfig) -> PersonalityTraits:
         """Generate personality from template."""
-        role_weights = template.personality_weights or {}
+        role_weights = getattr(template, 'personality_weights', None) or {}
 
         # Get speech_pattern from template if specified, otherwise random
         speech_pattern = template.personality_traits.get("speech_pattern")

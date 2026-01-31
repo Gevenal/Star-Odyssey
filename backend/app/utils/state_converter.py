@@ -22,28 +22,28 @@ class StateConverter:
 
     @staticmethod
     def snapshot_to_game_state(snapshot: Dict[str, Any], session_id: str) -> GameState:
-        # snapshot 可能是 {"state": {...}, "turn":..., "turn_history":...}
-        # 也可能是 {"state": {"state": {...}}, "turn":..., "turn_history":...}
+        # Snapshot may be {"state": {...}, "turn":..., "turn_history":...}
+        # Or {"state": {"state": {...}}, "turn":..., "turn_history":...}
         state_dict = snapshot.get("state", {}) if isinstance(snapshot, dict) else {}
 
-        # ✅ 兼容老结构：多包了一层 state
+        # Compatible with old structure: extra layer of state
         if isinstance(state_dict, dict) and isinstance(state_dict.get("state"), dict):
             inner = state_dict["state"]
             if any(k in inner for k in ("game_meta", "player", "world", "resources", "ship_systems", "npcs")):
                 state_dict = inner
 
-        # ✅ player：兼容多路径
+        # Player: compatible with multiple paths
         player_dict = state_dict.get("player", {})
         if not player_dict and isinstance(state_dict.get("state"), dict):
-            # 极端情况下再兜一层
+            # Fallback for extreme cases
             player_dict = state_dict["state"].get("player", {})
 
         player = StateConverter._convert_player(player_dict)
 
-        # ✅ npcs
+        # NPCs
         npcs = StateConverter._convert_npcs(state_dict.get("npcs", {}))
 
-        # ✅ world/resources/systems：兼容 world.resources 的那套
+        # World/resources/systems: compatible with world.resources structure
         world_dict = state_dict.get("world", {}) if isinstance(state_dict, dict) else {}
 
         resources_dict = state_dict.get("resources", {})
@@ -83,24 +83,26 @@ class StateConverter:
             reputation=player_dict.get("reputation", {}),
             discovered_secrets=player_dict.get("discovered_secrets", player_dict.get("known_secrets", [])),
             completed_actions=player_dict.get("completed_actions", []),
-            flags=player_dict.get("flags", {})
+            flags=player_dict.get("flags", {}),
+            active_quests=player_dict.get("active_quests", []),
+            completed_quests=player_dict.get("completed_quests", [])
         )
     
     @staticmethod
     def _convert_npcs(npcs_dict: Dict[str, Any]) -> Dict[str, NPCState]:
-        # 最简兜底：没有 npc 就返回空
+        # Simple fallback: return empty if no NPCs
         if not isinstance(npcs_dict, dict):
             return {}
         npcs: Dict[str, NPCState] = {}
         for npc_id, npc_data in npcs_dict.items():
             try:
-                # 如果npc_data已经是字典格式（从model_dump()来的），直接转换
+                # If npc_data is already a dict (from model_dump()), convert directly
                 if isinstance(npc_data, dict):
-                    # 确保personality字段是PersonalityTraits对象
+                    # Ensure personality field is PersonalityTraits object
                     if "personality" in npc_data and isinstance(npc_data["personality"], dict):
                         npc_data["personality"] = PersonalityTraits(**npc_data["personality"])
                     
-                    # 确保relationships中的每个关系是NPCRelationship对象
+                    # Ensure each relationship in relationships is NPCRelationship object
                     if "relationships" in npc_data and isinstance(npc_data["relationships"], dict):
                         relationships = {}
                         for rel_key, rel_data in npc_data["relationships"].items():
@@ -110,7 +112,7 @@ class StateConverter:
                                 relationships[rel_key] = rel_data
                         npc_data["relationships"] = relationships
                     
-                    # 确保secrets是NPCSecret对象列表
+                    # Ensure secrets is a list of NPCSecret objects
                     if "secrets" in npc_data and isinstance(npc_data["secrets"], list):
                         secrets = []
                         for secret_data in npc_data["secrets"]:
@@ -120,10 +122,18 @@ class StateConverter:
                                 secrets.append(secret_data)
                         npc_data["secrets"] = secrets
                     
-                    # 创建NPCState对象
+                    # Ensure skills field exists (set to empty dict if missing)
+                    if "skills" not in npc_data:
+                        npc_data["skills"] = {}
+                    
+                    # Ensure inventory field exists (set to empty list if missing)
+                    if "inventory" not in npc_data:
+                        npc_data["inventory"] = []
+                    
+                    # Create NPCState object
                     npcs[npc_id] = NPCState(**npc_data)
                 elif isinstance(npc_data, NPCState):
-                    # 如果已经是NPCState对象，直接使用
+                    # If already NPCState object, use directly
                     npcs[npc_id] = npc_data
             except Exception as e:
                 print(f"[StateConverter] Warning: Failed to convert NPC {npc_id}: {e}")

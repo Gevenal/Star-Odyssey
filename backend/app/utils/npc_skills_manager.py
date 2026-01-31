@@ -69,7 +69,8 @@ class NPCSkillsManager:
                         if skill in skills:
                             skills[skill] = min(100, skills[skill] + 5)
         
-        logger.debug(f"[NPCSkillsManager] Initialized skills for {npc.name}: {skills}")
+        npc_name = getattr(npc, 'name', getattr(npc, 'role', 'Unknown'))
+        logger.debug(f"[NPCSkillsManager] Initialized skills for {npc_name}: {skills}")
         return skills
 
     @staticmethod

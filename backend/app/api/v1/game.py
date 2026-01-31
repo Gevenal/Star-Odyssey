@@ -105,7 +105,7 @@ async def start_game(
     return GameStartResponse(
         session_id=session_id,
         opening_narration=opening_narration,
-        initial_state=game_state,  # 👈 修改：从 state_data 改为 game_state（现在是 GameState 对象）
+        initial_state=game_state,  # Changed from state_data to game_state (now GameState object)
         available_actions=available_actions,
         oracle_message="ALERT: MULTIPLE SYSTEM FAILURES DETECTED. CREW ASSISTANCE REQUIRED."
     )
@@ -120,6 +120,7 @@ async def start_game(
 async def submit_action(
     action: PlayerAction,
     game_loop=Depends(get_game_loop),
+    session_mgr: SessionStateManager = Depends(get_session_manager)
 ) -> GameActionResponse:
     # 1) Load snapshot (doc["state"])
     try:
@@ -149,7 +150,7 @@ async def submit_action(
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to save game state")
 
-    # 6) Response (保持你原有字段)
+    # 6) Response (keep original fields)
     narration_lines = [
         f"[System] Oxygen is now {new_oxygen:.1f}",
         f"[Player] action_id: {action.action_id}",
@@ -177,7 +178,7 @@ def _apply_oxygen_delta(gsm: GameStateManager, delta: float) -> float:
     cur = gsm.get("world.resources.oxygen_level.current", 0.0)
     new_val = max(0.0, float(cur) - 2.5)
     if not isinstance(cur, (int, float)):
-        # 如果当前结构被污染了，直接重置成 0 再算
+        # If current structure is corrupted, reset to 0 and recalculate
         cur = 0.0
         gsm.set("world.resources.oxygen_level", cur, validate=False)
 
@@ -289,7 +290,7 @@ async def get_available_actions(
     actions_file = game_data_dir / "player_actions.json"
 
     actions: list[ActionDefinition] = []
-    action_ids: list[str] = []  # 用于 urgent_actions / 去重
+    action_ids: list[str] = []  # For urgent_actions / deduplication
 
     def _location_requirement_allows(req_loc: str | None) -> bool:
         if not req_loc:
@@ -300,7 +301,7 @@ async def get_available_actions(
         if req_loc in player_loc or player_loc in req_loc:
             return True
 
-        # intro 特例
+        # Intro phase special case
         if phase == "intro" and req_loc == "command_bridge":
             return True
 
@@ -322,7 +323,7 @@ async def get_available_actions(
                 req = a.get("requirements", {}) or {}
                 req_loc = req.get("location")
 
-                # location filter（兼容 string / list）
+                # Location filter (compatible with string / list)
                 if isinstance(req_loc, list):
                     if req_loc and not any(_location_requirement_allows(x) for x in req_loc if isinstance(x, str)):
                         continue
@@ -330,11 +331,11 @@ async def get_available_actions(
                     if not _location_requirement_allows(req_loc if isinstance(req_loc, str) else None):
                         continue
 
-                # ✅ 关键：把 dict 转成 ActionDefinition（而不是把 id 字符串塞进 actions）
+                    # Key: convert dict to ActionDefinition (not just put id string into actions)
                 try:
                     action_def = ActionDefinition.model_validate(a)
                 except ValidationError:
-                    # 如果 JSON 某条 action 缺字段导致校验失败，就跳过这一条，避免整个接口 500
+                    # If JSON action missing fields causes validation failure, skip this one to avoid 500 error
                     continue
 
                 actions.append(action_def)
@@ -344,9 +345,9 @@ async def get_available_actions(
             actions = []
             action_ids = []
 
-    # 4) Fallback：如果 JSON 过滤后为空，至少给基础动作
+    # 4) Fallback: if JSON filtered to empty, at least provide basic actions
     if not actions:
-        # ⚠️ 这里的字段要匹配你 ActionDefinition 的必填项
+        # Warning: fields here must match ActionDefinition required fields
         DEFAULT_ACTION_DEFS: list[dict] = [
             {"id": "explore_location", "name": "Explore", "description": "Explore the current area."},
             {"id": "talk_to_npc", "name": "Talk", "description": "Talk to someone nearby."},
@@ -377,7 +378,7 @@ async def get_available_actions(
 
     context_hints.append("ORACLE seems to have more information to share.")
 
-    # 6) 去重（按 id 保序）
+    # 6) Deduplicate (preserve order by id)
     seen = set()
     dedup_actions: list[ActionDefinition] = []
     for a in actions:
@@ -388,7 +389,7 @@ async def get_available_actions(
         dedup_actions.append(a)
     actions = dedup_actions
 
-    # urgent_actions 去重并确保存在于 actions
+    # Deduplicate urgent_actions and ensure they exist in actions
     valid_ids = {a.id for a in actions}
     urgent_actions = [x for x in dict.fromkeys(urgent_actions) if x in valid_ids]
 
@@ -408,6 +409,7 @@ async def get_available_actions(
 async def end_turn(
     session_id: str,
     game_loop=Depends(get_game_loop),
+    session_mgr: SessionStateManager = Depends(get_session_manager)
 ) -> TurnEndResponse:
     # 1) Load snapshot
     try:
@@ -648,6 +650,181 @@ async def get_npc_info(
         )
     
     return npc
+
+
+@router.post(
+    "/npc/{npc_id}/interrogate",
+    response_model=NPCInterrogationResponse,
+    summary="Interrogate NPC",
+    description="Interrogate an NPC with intense questioning to extract information."
+)
+async def interrogate_npc(
+    npc_id: str,
+    request: NPCInterrogationRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager),
+    gemini_client = Depends(get_gemini_client)
+) -> NPCInterrogationResponse:
+    """
+    Interrogate an NPC.
+
+    Args:
+        npc_id: NPC to interrogate
+        request: Interrogation request
+        session_mgr: Session state manager
+        gemini_client: Gemini client for AI generation
+
+    Returns:
+        NPCInterrogationResponse with interrogation result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    if not npc.alive:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{npc.name} is not available"
+        )
+    
+    # Interrogate
+    from app.utils.npc_interrogation_manager import NPCInterrogationManager
+    from app.core.game_state_manager import GameStateManager
+    
+    manager = NPCInterrogationManager(gemini_client=gemini_client)
+    result = await manager.interrogate_npc(
+        npc, request.question, game_state, request.interrogation_type
+    )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update relationship
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return NPCInterrogationResponse(
+        success=result["success"],
+        response=result["response"],
+        trust_change=result.get("trust_change", 0),
+        information_revealed=result.get("information_revealed", [])
+    )
+
+
+@router.post(
+    "/npc/{npc_id}/transfer-item",
+    response_model=NPCItemTransferResponse,
+    summary="Transfer item with NPC",
+    description="NPC gives item to player or requests item from player."
+)
+async def transfer_item_with_npc(
+    npc_id: str,
+    request: NPCItemTransferRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> NPCItemTransferResponse:
+    """
+    Transfer item with NPC.
+
+    Args:
+        npc_id: NPC to interact with
+        request: Item transfer request
+        session_mgr: Session state manager
+
+    Returns:
+        NPCItemTransferResponse with transfer result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    if not npc.alive:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{npc.name} is not available"
+        )
+    
+    # Transfer item
+    from app.utils.npc_item_manager import NPCItemManager
+    from app.core.game_state_manager import GameStateManager
+    
+    if request.transfer_type == "npc_gives":
+        result = NPCItemManager.npc_give_item_to_player(
+            npc, game_state.player, request.item_id
+        )
+    else:  # "player_gives"
+        result = NPCItemManager.npc_request_item_from_player(
+            npc, game_state.player, request.item_id
+        )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Item transfer failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update NPC inventory
+    gs.set(f"npcs.{npc_id}.inventory", npc.inventory, validate=False)
+    
+    # Update player inventory
+    gs.set("player.inventory", game_state.player.inventory, validate=False)
+    
+    # Update relationship
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    trust_change = result.get("trust_increase", 0)
+    
+    return NPCItemTransferResponse(
+        success=True,
+        transfer_type=request.transfer_type,
+        item_id=request.item_id,
+        trust_change=trust_change,
+        message=result.get("message", "")
+    )
 
 
 @router.post(

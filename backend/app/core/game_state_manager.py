@@ -87,7 +87,7 @@ class GameStateManager:
                 "last_updated": None,
             },
 
-            # ✅ 新结构：world 下挂资源/系统（匹配 state_variables.json 的 variable_path）
+            # New structure: world contains resources/systems (matches variable_path in state_variables.json)
             "world": {
                 "day": 1,
                 "turn": 1,
@@ -110,7 +110,7 @@ class GameStateManager:
             "locations": {},
             "npcs": {},
 
-            # ✅ player 结构也对齐一下
+            # Align player structure
             "player": {
                 "name": "",
                 "health": 100,
@@ -125,7 +125,7 @@ class GameStateManager:
             }
         }
 
-        # ✅ 读你的 state_variables.json（variables 列表）
+        # Read state_variables.json (variables list)
         vars_list = []
         if isinstance(self.state_config, dict):
             vars_list = self.state_config.get("variables", []) or []
@@ -139,11 +139,11 @@ class GameStateManager:
 
             init_val = v.get("initial_value", 0)
 
-            # ✅ 按 variable_path 写入 state（支持 world.resources.xxx.current 这种）
+            # Write to state by variable_path (supports world.resources.xxx.current format)
             self._set_by_path(state, path, init_val)
 
-            # ✅ 如果是 resource level，顺便补 max/min/critical/decay_rate（给 converter/未来逻辑用）
-            # 只对 ...current 这种末尾做扩展
+            # If resource level, also add max/min/critical/decay_rate (for converter/future logic)
+            # Only expand for ...current endings
             if path.endswith(".current"):
                 base = path[:-len(".current")]
                 self._set_by_path(state, f"{base}.max", v.get("max_value", 100.0))
@@ -151,7 +151,7 @@ class GameStateManager:
                 self._set_by_path(state, f"{base}.critical_threshold", v.get("critical_threshold", 20.0))
                 self._set_by_path(state, f"{base}.decay_rate", v.get("decay_rate", 0.0))
 
-        # locations 初始化你原来那段可以继续用（如果 world_config 里有）
+        # Location initialization can continue using original code (if in world_config)
         if "world_config" in self.world_config:
             locations = self.world_config["world_config"].get("locations", [])
             for loc in locations:
@@ -164,18 +164,18 @@ class GameStateManager:
                     "connected_to": loc.get("connected_to", [])
                 }
 
-        # ✅ 生成NPC
+        # Generate NPCs
         try:
             from app.game_data.loader import GameDataLoader
             from app.utils.npc_generator import NPCGenerator
             
-            # 加载游戏数据
+            # Load game data
             data_loader = GameDataLoader(data_dir=self.config_dir)
             trait_pool_data = data_loader.load_personality_traits()
             npc_templates = data_loader.load_npc_templates()
             initial_relationships = data_loader.get_npc_initial_relationships()
             
-            # 将traits列表转换为按category分组的字典
+            # Convert traits list to dict grouped by category
             trait_pool_dict = {}
             for trait in trait_pool_data.traits:
                 category = trait.category
@@ -183,24 +183,24 @@ class GameStateManager:
                     trait_pool_dict[category] = []
                 trait_pool_dict[category].append(trait)
             
-            # 创建NPC生成器
+            # Create NPC generator
             generator = NPCGenerator(
                 trait_pool=trait_pool_dict,
                 npc_templates=npc_templates
             )
             
-            # 获取所有NPC角色ID（从模板中）
+            # Get all NPC role IDs (from templates)
             npc_roles = list(npc_templates.keys())
             
-            # 生成完整船员
+            # Generate full crew
             generated_npcs = generator.generate_full_crew(
                 roles=npc_roles,
                 initial_relationships=initial_relationships
             )
             
-            # 将NPC转换为字典格式并添加到state
+            # Convert NPCs to dict format and add to state
             for npc_id, npc in generated_npcs.items():
-                # 将Pydantic模型转换为字典
+                # Convert Pydantic model to dict
                 npc_dict = npc.model_dump()
                 state["npcs"][npc_id] = npc_dict
             
@@ -209,7 +209,7 @@ class GameStateManager:
             import traceback
             print(f"[GameStateManager] Warning: Failed to generate NPCs: {e}")
             traceback.print_exc()
-            # 如果NPC生成失败，继续使用空的npcs字典
+            # If NPC generation fails, continue with empty npcs dict
 
         return state
 
@@ -530,7 +530,7 @@ class GameStateManager:
         self.set("game_meta.current_hour", hour, validate=False)
         self.set("world.day", day, validate=False)
         self.set("world.time_of_day", f"{hour:02d}:00", validate=False)
-        self.set("world.turn", current_turn + 1, validate=False)  # 你想从1开始就 +1
+        self.set("world.turn", current_turn + 1, validate=False)  # Start from 1, so +1
 
 # ===== Usage Example =====
 if __name__ == "__main__":

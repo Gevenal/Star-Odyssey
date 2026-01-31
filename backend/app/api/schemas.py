@@ -666,7 +666,6 @@ class FormAllianceRequest(BaseModel):
                 "npc_id": "npc_captain",
                 "alliance_type": "mutual_support"
             }
-            }
         }
 
 
@@ -724,8 +723,6 @@ class ProvideTherapyRequest(BaseModel):
     """Request to provide therapy to NPC."""
 
     session_id: str = Field(..., description="Current game session ID")
-    therapist_npc_id: str = Field(..., description="NPC providing therapy")
-    patient_npc_id: str = Field(..., description="NPC receiving therapy")
     therapy_type: str = Field(
         default="counseling",
         description="Type of therapy",
@@ -736,8 +733,6 @@ class ProvideTherapyRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "session_id": "sess_abc123",
-                "therapist_npc_id": "npc_doctor",
-                "patient_npc_id": "npc_engineer",
                 "therapy_type": "counseling"
             }
         }

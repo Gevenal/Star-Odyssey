@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import ValidationError
 from app.game_data.schemas import (
     WorldConfig,

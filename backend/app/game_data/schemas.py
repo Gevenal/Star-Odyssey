@@ -64,8 +64,10 @@ class LocationConfig(BaseModel):
 class WorldConfig(BaseModel):
     """Complete world configuration."""
 
-    _comment: Optional[str] = Field(None, alias="_comment")
-    _version: str = Field(..., alias="_version")
+    model_config = {"populate_by_name": True}
+    
+    comment: Optional[str] = Field(None, alias="_comment", exclude=True)
+    version: str = Field(..., alias="_version")
     game_settings: GameSettings = Field(..., description="Game settings")
     victory_conditions: List[VictoryCondition] = Field(
         default_factory=list,
@@ -105,7 +107,9 @@ class StateVariableDefinition(BaseModel):
 class StateVariablesConfig(BaseModel):
     """State variables configuration."""
 
-    _version: str = Field(..., alias="_version")
+    model_config = {"populate_by_name": True}
+    
+    version: str = Field(..., alias="_version")
     variables: List[StateVariableDefinition] = Field(
         ...,
         description="Variable definitions"
@@ -228,7 +232,9 @@ class PersonalityTraitDefinition(BaseModel):
 class PersonalityTraitsPool(BaseModel):
     """Pool of personality traits."""
 
-    _version: str = Field(..., alias="_version")
+    model_config = {"populate_by_name": True}
+    
+    version: str = Field(..., alias="_version")
     traits: List[PersonalityTraitDefinition] = Field(
         ...,
         description="Trait definitions"
