@@ -42,6 +42,8 @@ import json
 from pathlib import Path
 from pydantic import ValidationError
 
+from app.core.game_state_manager import GameStateManager
+
 router = APIRouter()
 
 
