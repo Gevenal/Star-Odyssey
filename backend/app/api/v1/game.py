@@ -10,6 +10,27 @@ from app.api.schemas import (
     TurnEndResponse,
     NPCTalkRequest,
     NPCTalkResponse,
+    NPCInterrogationRequest,
+    NPCInterrogationResponse,
+    NPCItemTransferRequest,
+    NPCItemTransferResponse,
+    AssignTaskRequest,
+    AssignTaskResponse,
+    MediateConflictRequest,
+    MediateConflictResponse,
+    BoostMoraleRequest,
+    BoostMoraleResponse,
+    FormAllianceRequest,
+    FormAllianceResponse,
+    ListConflictsResponse,
+    ProvideTherapyRequest,
+    ProvideTherapyResponse,
+    PlayerCounselingRequest,
+    PlayerCounselingResponse,
+    InvestigateNPCRequest,
+    InvestigateNPCResponse,
+    ListSuspiciousNPCsResponse,
+    GetNPCSkillsResponse,
 )
 from app.models.action import ActionDefinition, PlayerAction
 from app.models.response import GameActionResponse
@@ -509,7 +530,24 @@ async def talk_to_npc(
             detail=f"Failed to generate NPC dialogue: {str(e)}"
         )
     
-    # 5. Check for secret revelation after dialogue
+    # 5. Check for quest giving (NPC may give quest during dialogue)
+    from app.utils.npc_quest_manager import NPCQuestManager
+    quest_given = None
+    quest = NPCQuestManager.generate_quest(npc, game_state)
+    if quest:
+        # Add quest to player's active quests
+        if quest.quest_id not in game_state.player.active_quests:
+            game_state.player.active_quests.append(quest.quest_id)
+            quest_given = quest.quest_id
+            # Save quest to state
+            state_data = await session_mgr.get_state(request.session_id)
+            gs = GameStateManager()
+            gs.load_snapshot(state_data)
+            gs.set("player.active_quests", game_state.player.active_quests, validate=False)
+            updated_snapshot = gs.get_snapshot()
+            await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    # 6. Check for secret revelation after dialogue
     context = {
         "action_type": "dialogue",
         "player_message": request.message
@@ -560,7 +598,8 @@ async def talk_to_npc(
         dialogue=dialogue,
         relationship_level=relationship_level,
         disposition=disposition,
-        secrets_revealed=revealed_secret_ids  # Add this field if schema supports it
+        quest_given=quest_given,
+        secrets_revealed=revealed_secret_ids
     )
 
 
@@ -609,3 +648,740 @@ async def get_npc_info(
         )
     
     return npc
+
+
+@router.post(
+    "/npc/{npc_id}/assign-task",
+    response_model=AssignTaskResponse,
+    summary="Assign task to NPC",
+    description="Assign a specific task to an NPC. NPC may accept or refuse based on trust and compatibility."
+)
+async def assign_task_to_npc(
+    npc_id: str,
+    request: AssignTaskRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> AssignTaskResponse:
+    """
+    Assign a task to an NPC.
+
+    Args:
+        npc_id: NPC to assign task to
+        request: Task assignment request
+        session_mgr: Session state manager
+
+    Returns:
+        AssignTaskResponse with assignment result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    # Get player trust level
+    player_trust = 0
+    if "player" in npc.relationships:
+        player_trust = npc.relationships["player"].trust_level
+    
+    # Assign task
+    from app.utils.npc_task_assignment import NPCTaskAssignment
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCTaskAssignment.assign_task_to_npc(
+        npc, request.task_description, request.task_type, game_state, player_trust
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Task assignment failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update NPC goals and activity
+    gs.set(f"npcs.{npc_id}.goals", npc.goals, validate=False)
+    gs.set(f"npcs.{npc_id}.current_activity", npc.current_activity, validate=False)
+    
+    # Update trust
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return AssignTaskResponse(
+        success=True,
+        npc_id=npc_id,
+        npc_name=npc.name,
+        task_description=request.task_description,
+        trust_change=result.get("trust_change", 0),
+        message=result.get("message", "")
+    )
+
+
+@router.get(
+    "/conflicts",
+    response_model=ListConflictsResponse,
+    summary="List active conflicts",
+    description="Get list of active conflicts between NPCs that can be mediated."
+)
+async def list_conflicts(
+    session_id: str,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> ListConflictsResponse:
+    """
+    List active conflicts between NPCs.
+
+    Args:
+        session_id: Game session ID
+        session_mgr: Session state manager
+
+    Returns:
+        ListConflictsResponse with conflict list
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    # Find conflicts
+    from app.utils.npc_conflict_mediation import NPCConflictMediation
+    conflicts = NPCConflictMediation.find_active_conflicts(game_state)
+    
+    return ListConflictsResponse(conflicts=conflicts)
+
+
+@router.post(
+    "/mediate-conflict",
+    response_model=MediateConflictResponse,
+    summary="Mediate conflict between NPCs",
+    description="Attempt to mediate a conflict between two NPCs."
+)
+async def mediate_conflict(
+    request: MediateConflictRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> MediateConflictResponse:
+    """
+    Mediate conflict between two NPCs.
+
+    Args:
+        request: Conflict mediation request
+        session_mgr: Session state manager
+
+    Returns:
+        MediateConflictResponse with mediation result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc1 = game_state.npcs.get(request.npc1_id)
+    npc2 = game_state.npcs.get(request.npc2_id)
+    
+    if not npc1:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {request.npc1_id} not found"
+        )
+    if not npc2:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {request.npc2_id} not found"
+        )
+    
+    # Mediate conflict
+    from app.utils.npc_conflict_mediation import NPCConflictMediation
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCConflictMediation.mediate_conflict(
+        npc1, npc2, game_state, request.mediation_approach
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Mediation failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update relationships
+    if request.npc2_id in npc1.relationships:
+        rel = npc1.relationships[request.npc2_id]
+        gs.set(f"npcs.{request.npc1_id}.relationships.{request.npc2_id}.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{request.npc1_id}.relationships.{request.npc2_id}.relationship_history", rel.relationship_history, validate=False)
+    if request.npc1_id in npc2.relationships:
+        rel = npc2.relationships[request.npc1_id]
+        gs.set(f"npcs.{request.npc2_id}.relationships.{request.npc1_id}.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{request.npc2_id}.relationships.{request.npc1_id}.relationship_history", rel.relationship_history, validate=False)
+    
+    # Update player relationships
+    if "player" in npc1.relationships:
+        rel = npc1.relationships["player"]
+        gs.set(f"npcs.{request.npc1_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+    if "player" in npc2.relationships:
+        rel = npc2.relationships["player"]
+        gs.set(f"npcs.{request.npc2_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+    
+    # Update morale
+    if hasattr(game_state.world, 'crew_morale'):
+        gs.set("world.crew_morale", game_state.world.crew_morale, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return MediateConflictResponse(
+        success=True,
+        npc1_id=request.npc1_id,
+        npc2_id=request.npc2_id,
+        trust_improvement=result.get("trust_improvement"),
+        morale_boost=result.get("morale_boost"),
+        message=result.get("message", "")
+    )
+
+
+@router.post(
+    "/boost-morale",
+    response_model=BoostMoraleResponse,
+    summary="Boost crew morale",
+    description="Actively boost crew morale through various methods."
+)
+async def boost_morale(
+    request: BoostMoraleRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> BoostMoraleResponse:
+    """
+    Boost crew morale.
+
+    Args:
+        request: Morale boost request
+        session_mgr: Session state manager
+
+    Returns:
+        BoostMoraleResponse with boost result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    # Boost morale
+    from app.utils.morale_boost_manager import MoraleBoostManager
+    from app.core.game_state_manager import GameStateManager
+    
+    result = MoraleBoostManager.boost_morale(
+        game_state, request.boost_method, request.target_npcs
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Morale boost failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update morale
+    gs.set("world.crew_morale", game_state.world.crew_morale, validate=False)
+    
+    # Update NPC stress and relationships
+    for npc_info in result.get("affected_npcs", []):
+        npc_id = npc_info["npc_id"]
+        npc = game_state.npcs.get(npc_id)
+        if npc:
+            gs.set(f"npcs.{npc_id}.stress_level", npc.stress_level, validate=False)
+            gs.set(f"npcs.{npc_id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
+            if "player" in npc.relationships:
+                rel = npc.relationships["player"]
+                gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+                gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return BoostMoraleResponse(
+        success=True,
+        initial_morale=result["initial_morale"],
+        new_morale=result["new_morale"],
+        morale_boost=result["morale_boost"],
+        affected_npcs=result.get("affected_npcs", []),
+        message=result.get("message", "")
+    )
+
+
+@router.post(
+    "/npc/{npc_id}/form-alliance",
+    response_model=FormAllianceResponse,
+    summary="Form alliance with NPC",
+    description="Form an alliance with an NPC. Requires sufficient trust."
+)
+async def form_alliance_with_npc(
+    npc_id: str,
+    request: FormAllianceRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> FormAllianceResponse:
+    """
+    Form alliance with an NPC.
+
+    Args:
+        npc_id: NPC to form alliance with
+        request: Alliance formation request
+        session_mgr: Session state manager
+
+    Returns:
+        FormAllianceResponse with alliance result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    # Form alliance
+    from app.utils.npc_alliance_manager import NPCAllianceManager
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCAllianceManager.form_alliance(
+        npc, game_state, request.alliance_type
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Alliance formation failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update trust and relationship
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    # Update morale
+    if hasattr(game_state.world, 'crew_morale'):
+        gs.set("world.crew_morale", game_state.world.crew_morale, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return FormAllianceResponse(
+        success=True,
+        npc_id=npc_id,
+        npc_name=npc.name,
+        alliance_type=result["alliance_type"],
+        trust_boost=result["trust_boost"],
+        new_trust_level=result["new_trust_level"],
+        message=result.get("message", "")
+    )
+
+
+@router.post(
+    "/npc/{therapist_npc_id}/provide-therapy/{patient_npc_id}",
+    response_model=ProvideTherapyResponse,
+    summary="Provide therapy to NPC",
+    description="NPC provides therapy/counseling to help another NPC recover from breakdown."
+)
+async def provide_therapy(
+    therapist_npc_id: str,
+    patient_npc_id: str,
+    request: ProvideTherapyRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> ProvideTherapyResponse:
+    """
+    Provide therapy to NPC.
+
+    Args:
+        therapist_npc_id: NPC providing therapy
+        patient_npc_id: NPC receiving therapy
+        request: Therapy request
+        session_mgr: Session state manager
+
+    Returns:
+        ProvideTherapyResponse with therapy result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    therapist = game_state.npcs.get(therapist_npc_id)
+    patient = game_state.npcs.get(patient_npc_id)
+    
+    if not therapist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Therapist NPC {therapist_npc_id} not found"
+        )
+    if not patient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Patient NPC {patient_npc_id} not found"
+        )
+    
+    # Provide therapy
+    from app.utils.npc_recovery_manager import NPCRecoveryManager
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCRecoveryManager.provide_therapy(
+        therapist, patient, game_state, request.therapy_type
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Therapy failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update patient stress and breakdown state
+    gs.set(f"npcs.{patient_npc_id}.stress_level", patient.stress_level, validate=False)
+    gs.set(f"npcs.{patient_npc_id}.is_in_breakdown", patient.is_in_breakdown, validate=False)
+    if result.get("recovered_from_breakdown"):
+        gs.set(f"npcs.{patient_npc_id}.current_activity", None, validate=False)
+    
+    # Update relationship
+    if patient_npc_id in therapist.relationships:
+        rel = therapist.relationships[patient_npc_id]
+        gs.set(f"npcs.{therapist_npc_id}.relationships.{patient_npc_id}.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{therapist_npc_id}.relationships.{patient_npc_id}.relationship_history", rel.relationship_history, validate=False)
+    
+    # Update morale
+    if hasattr(game_state.world, 'crew_morale') and result.get("morale_boost", 0) > 0:
+        gs.set("world.crew_morale", game_state.world.crew_morale, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return ProvideTherapyResponse(
+        success=True,
+        therapist_name=therapist.name,
+        patient_name=patient.name,
+        stress_reduction=result["stress_reduction"],
+        recovered_from_breakdown=result.get("recovered_from_breakdown", False),
+        morale_boost=result.get("morale_boost", 0),
+        message=result.get("message", "")
+    )
+
+
+@router.post(
+    "/npc/{npc_id}/counsel",
+    response_model=PlayerCounselingResponse,
+    summary="Player provides counseling",
+    description="Player provides counseling to help NPC recover from breakdown."
+)
+async def player_provide_counseling(
+    npc_id: str,
+    request: PlayerCounselingRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> PlayerCounselingResponse:
+    """
+    Player provides counseling to NPC.
+
+    Args:
+        npc_id: NPC to counsel
+        request: Counseling request
+        session_mgr: Session state manager
+
+    Returns:
+        PlayerCounselingResponse with counseling result
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    # Provide counseling
+    from app.utils.npc_recovery_manager import NPCRecoveryManager
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCRecoveryManager.player_provide_counseling(
+        npc, game_state, request.counseling_approach
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Counseling failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update NPC stress and breakdown
+    gs.set(f"npcs.{npc_id}.stress_level", npc.stress_level, validate=False)
+    gs.set(f"npcs.{npc_id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
+    
+    # Update relationship
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    # Update morale
+    if hasattr(game_state.world, 'crew_morale') and result.get("morale_boost", 0) > 0:
+        gs.set("world.crew_morale", game_state.world.crew_morale, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return PlayerCounselingResponse(
+        success=True,
+        npc_name=npc.name,
+        stress_reduction=result["stress_reduction"],
+        recovered_from_breakdown=result.get("recovered_from_breakdown", False),
+        trust_increase=result.get("trust_increase", 0),
+        message=result.get("message", "")
+    )
+
+
+@router.get(
+    "/suspicious-npcs",
+    response_model=ListSuspiciousNPCsResponse,
+    summary="List suspicious NPCs",
+    description="Get list of NPCs showing suspicious behavior patterns."
+)
+async def list_suspicious_npcs(
+    session_id: str,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> ListSuspiciousNPCsResponse:
+    """
+    List suspicious NPCs.
+
+    Args:
+        session_id: Game session ID
+        session_mgr: Session state manager
+
+    Returns:
+        ListSuspiciousNPCsResponse with suspicious NPCs
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    # Check for suspicious behavior
+    from app.utils.npc_investigation_manager import NPCInvestigationManager
+    suspicious_npcs = NPCInvestigationManager.check_suspicious_behavior(game_state)
+    
+    return ListSuspiciousNPCsResponse(suspicious_npcs=suspicious_npcs)
+
+
+@router.post(
+    "/npc/{npc_id}/investigate",
+    response_model=InvestigateNPCResponse,
+    summary="Investigate NPC",
+    description="Investigate an NPC for suspicious behavior or background information."
+)
+async def investigate_npc(
+    npc_id: str,
+    request: InvestigateNPCRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> InvestigateNPCResponse:
+    """
+    Investigate an NPC.
+
+    Args:
+        npc_id: NPC to investigate
+        request: Investigation request
+        session_mgr: Session state manager
+
+    Returns:
+        InvestigateNPCResponse with investigation results
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    # Investigate
+    from app.utils.npc_investigation_manager import NPCInvestigationManager
+    from app.core.game_state_manager import GameStateManager
+    
+    result = NPCInvestigationManager.investigate_npc(
+        npc, game_state, request.investigation_type, request.investigation_method
+    )
+    
+    if not result["success"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("reason", "Investigation failed")
+        )
+    
+    # Update state
+    state_data = await session_mgr.get_state(request.session_id)
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Update relationship
+    if "player" in npc.relationships:
+        rel = npc.relationships["player"]
+        gs.set(f"npcs.{npc_id}.relationships.player.trust_level", rel.trust_level, validate=False)
+        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+    
+    updated_snapshot = gs.get_snapshot()
+    await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    return InvestigateNPCResponse(
+        success=True,
+        npc_name=npc.name,
+        findings=result.get("findings", []),
+        trust_change=result.get("trust_change", 0),
+        message=result.get("message", "")
+    )
+
+
+@router.get(
+    "/npc/{npc_id}/skills",
+    response_model=GetNPCSkillsResponse,
+    summary="Get NPC skills",
+    description="Get NPC skill levels and summary."
+)
+async def get_npc_skills(
+    npc_id: str,
+    session_id: str,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+) -> GetNPCSkillsResponse:
+    """
+    Get NPC skills.
+
+    Args:
+        npc_id: NPC to check
+        session_id: Game session ID
+        session_mgr: Session state manager
+
+    Returns:
+        GetNPCSkillsResponse with NPC skills
+    """
+    # Load game state
+    try:
+        state_data = await session_mgr.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    # Get skills summary
+    from app.utils.npc_skills_manager import NPCSkillsManager
+    summary = NPCSkillsManager.get_npc_skill_summary(npc)
+    
+    return GetNPCSkillsResponse(
+        npc_id=npc.id,
+        npc_name=npc.name,
+        skills=summary["skills"],
+        primary_skills=summary["primary_skills"],
+        average_skill_level=summary["average_skill_level"]
+    )

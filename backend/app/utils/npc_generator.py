@@ -52,6 +52,19 @@ class NPCGenerator:
             breakdown_trait = template.breaking_point.get('breakdown_trait')
             breakdown_behavior = template.breaking_point.get('breakdown_behavior')
 
+        # Get starting inventory from template
+        starting_inventory = getattr(template, 'starting_inventory', []) or []
+        
+        # Initialize skills
+        from app.utils.npc_skills_manager import NPCSkillsManager
+        # Create temporary NPC-like object for skill initialization
+        class TempNPC:
+            def __init__(self, role, personality):
+                self.role = role
+                self.personality = personality
+        temp_npc = TempNPC(template.role, personality)
+        skills = NPCSkillsManager.initialize_npc_skills(temp_npc)
+        
         npc = NPCState(
             id=npc_id,
             name=template.name,
@@ -68,10 +81,12 @@ class NPCGenerator:
             hidden_agenda_type=getattr(template, 'hidden_agenda_type', None),
             hidden_agenda_conflicts_with_player=getattr(template, 'hidden_agenda_conflicts_with_player', False),
             current_activity=None,
+            inventory=starting_inventory.copy(),
             breaking_point_threshold=breaking_point_threshold,
             breakdown_trait=breakdown_trait,
             breakdown_behavior=breakdown_behavior,
             is_in_breakdown=False,
+            skills=skills
         )
         
         # Initialize breakdown state

@@ -21,7 +21,7 @@ class EndingGenerator:
         ending_type = self._determine_ending_type(metrics)
         prompt = self._build_ending_prompt(final_state, metrics, ending_type)
 
-        narration = await self.gemini.generate_text(prompt)
+        narration = await self.gemini.generate(prompt)
         survivor_fates = await self._generate_survivor_fates(final_state)
         epilogue = await self._generate_epilogue(final_state, metrics, ending_type)
         title = self._generate_title(ending_type, metrics)

@@ -207,6 +207,11 @@ class NPCState(BaseModel):
         description="What the NPC is currently doing",
         examples=["repairing reactor", "sleeping", "arguing with another crew member"]
     )
+    inventory: List[str] = Field(
+        default_factory=list,
+        description="Items the NPC is carrying",
+        examples=[["medical_scanner", "trauma_kit"], ["multitool", "repair_kit"], ["captain_keycard", "sidearm"]]
+    )
     breaking_point_threshold: Optional[int] = Field(
         default=None,
         ge=0,
@@ -224,6 +229,11 @@ class NPCState(BaseModel):
     is_in_breakdown: bool = Field(
         default=False,
         description="Whether NPC is currently in breakdown state"
+    )
+    skills: Dict[str, int] = Field(
+        default_factory=dict,
+        description="NPC skill levels (skill_name -> level 0-100)",
+        examples=[{"medical": 75, "engineering": 60, "security": 40}, {"repair": 80, "navigation": 50}]
     )
 
     @field_validator("health")

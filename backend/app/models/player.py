@@ -60,6 +60,16 @@ class PlayerState(BaseModel):
         description="Player-specific boolean flags for quest/story tracking",
         examples=[{"met_oracle": True, "knows_about_sabotage": False, "first_death_witnessed": True}]
     )
+    active_quests: List[str] = Field(
+        default_factory=list,
+        description="Active quest IDs from NPCs",
+        examples=[["quest_repair_reactor", "quest_find_saboteur"]]
+    )
+    completed_quests: List[str] = Field(
+        default_factory=list,
+        description="Completed quest IDs",
+        examples=[["quest_repair_reactor"]]
+    )
 
     @field_validator("health")
     @classmethod

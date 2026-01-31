@@ -51,8 +51,15 @@ class NPCAgent(BaseAgent):
         if not npc.alive:
             return False
         
-        # If in breakdown state, may still act but with limited capacity
-        # (We allow them to act, but behavior will be affected)
+        # If in breakdown state, check breakdown behavior
+        if npc.is_in_breakdown:
+            # Some breakdown behaviors prevent action
+            if npc.breakdown_behavior:
+                breakdown_lower = npc.breakdown_behavior.lower()
+                if "refuse" in breakdown_lower or "lock" in breakdown_lower or "isolate" in breakdown_lower:
+                    # NPC refuses to act or is locked in isolation
+                    return False
+            # Otherwise, allow action but behavior will be affected
         
         return True
 

@@ -388,6 +388,14 @@ class NPCTalkResponse(BaseModel):
         description="NPC's disposition toward player",
         examples=["friendly", "neutral", "hostile"]
     )
+    quest_given: Optional[str] = Field(
+        default=None,
+        description="Quest ID if NPC gave a quest during dialogue"
+    )
+    secrets_revealed: List[str] = Field(
+        default_factory=list,
+        description="Secret IDs revealed during dialogue"
+    )
 
     class Config:
         json_schema_extra = {
@@ -396,6 +404,510 @@ class NPCTalkResponse(BaseModel):
                 "npc_name": "Captain Elena Chen",
                 "dialogue": "The reactor is stable for now, but we need to keep monitoring it closely.",
                 "relationship_level": 50,
-                "disposition": "friendly"
+                "disposition": "friendly",
+                "quest_given": None
+            }
+        }
+
+
+class NPCInterrogationRequest(BaseModel):
+    """Request to interrogate an NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to interrogate")
+    question: str = Field(..., min_length=1, description="Question to ask")
+    interrogation_type: str = Field(
+        default="questioning",
+        description="Type of interrogation",
+        examples=["questioning", "threatening", "confronting"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_captain",
+                "question": "What really happened to the ship?",
+                "interrogation_type": "confronting"
+            }
+        }
+
+
+class NPCInterrogationResponse(BaseModel):
+    """Response from NPC interrogation."""
+
+    npc_id: str = Field(..., description="NPC identifier")
+    npc_name: str = Field(..., description="NPC's name")
+    response: str = Field(..., description="NPC's response under interrogation")
+    trust_change: int = Field(..., description="Change in trust level (usually negative)")
+    secrets_revealed: List[str] = Field(
+        default_factory=list,
+        description="Secret IDs revealed during interrogation"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "npc_id": "npc_captain",
+                "npc_name": "Captain Elena Chen",
+                "response": "I... I didn't want to tell anyone, but...",
+                "trust_change": -10,
+                "secrets_revealed": ["secret_captain_override"]
+            }
+        }
+
+
+class NPCItemTransferRequest(BaseModel):
+    """Request to transfer item with NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to interact with")
+    item_id: str = Field(..., description="Item ID")
+    direction: str = Field(
+        ...,
+        description="Transfer direction: 'npc_to_player' or 'player_to_npc'",
+        examples=["npc_to_player", "player_to_npc"]
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        description="Reason for transfer"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_engineer",
+                "item_id": "multitool",
+                "direction": "npc_to_player",
+                "reason": "gift"
+            }
+        }
+
+
+class NPCItemTransferResponse(BaseModel):
+    """Response from item transfer."""
+
+    success: bool = Field(..., description="Whether transfer succeeded")
+    item_id: str = Field(..., description="Item ID")
+    direction: str = Field(..., description="Transfer direction")
+    trust_change: int = Field(..., description="Change in trust level")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "item_id": "multitool",
+                "direction": "npc_to_player",
+                "trust_change": 5,
+                "message": "Engineer gave you multitool"
+            }
+        }
+
+
+class AssignTaskRequest(BaseModel):
+    """Request to assign task to NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to assign task to")
+    task_description: str = Field(..., min_length=1, description="Description of the task")
+    task_type: str = Field(
+        default="general",
+        description="Type of task",
+        examples=["repair", "medical", "investigation", "security", "general"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_engineer",
+                "task_description": "Repair the reactor cooling system",
+                "task_type": "repair"
+            }
+        }
+
+
+class AssignTaskResponse(BaseModel):
+    """Response from task assignment."""
+
+    success: bool = Field(..., description="Whether assignment succeeded")
+    npc_id: str = Field(..., description="NPC ID")
+    npc_name: str = Field(..., description="NPC name")
+    task_description: str = Field(..., description="Task description")
+    trust_change: int = Field(..., description="Change in trust level")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "npc_id": "npc_engineer",
+                "npc_name": "Marcus Okafor",
+                "task_description": "Repair the reactor cooling system",
+                "trust_change": 3,
+                "message": "Marcus Okafor accepted the task: Repair the reactor cooling system"
+            }
+        }
+
+
+class MediateConflictRequest(BaseModel):
+    """Request to mediate conflict between NPCs."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc1_id: str = Field(..., description="First NPC in conflict")
+    npc2_id: str = Field(..., description="Second NPC in conflict")
+    mediation_approach: str = Field(
+        default="diplomatic",
+        description="Approach to mediation",
+        examples=["diplomatic", "authoritative", "compromise"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc1_id": "npc_captain",
+                "npc2_id": "npc_engineer",
+                "mediation_approach": "diplomatic"
+            }
+        }
+
+
+class MediateConflictResponse(BaseModel):
+    """Response from conflict mediation."""
+
+    success: bool = Field(..., description="Whether mediation succeeded")
+    npc1_id: str = Field(..., description="First NPC ID")
+    npc2_id: str = Field(..., description="Second NPC ID")
+    trust_improvement: Optional[int] = Field(default=None, description="Trust improvement between NPCs")
+    morale_boost: Optional[int] = Field(default=None, description="Morale boost from successful mediation")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "npc1_id": "npc_captain",
+                "npc2_id": "npc_engineer",
+                "trust_improvement": 10,
+                "morale_boost": 5,
+                "message": "Successfully mediated conflict between Captain Chen and Engineer Okafor"
+            }
+        }
+
+
+class BoostMoraleRequest(BaseModel):
+    """Request to boost crew morale."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    boost_method: str = Field(
+        default="speech",
+        description="Method of boosting morale",
+        examples=["speech", "action", "resource_sharing", "celebration"]
+    )
+    target_npcs: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of NPC IDs to target (None = all NPCs)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "boost_method": "speech",
+                "target_npcs": None
+            }
+        }
+
+
+class BoostMoraleResponse(BaseModel):
+    """Response from morale boost."""
+
+    success: bool = Field(..., description="Whether boost succeeded")
+    initial_morale: int = Field(..., description="Initial morale level")
+    new_morale: int = Field(..., description="New morale level")
+    morale_boost: int = Field(..., description="Amount of morale boosted")
+    affected_npcs: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="NPCs affected by morale boost"
+    )
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "initial_morale": 45,
+                "new_morale": 55,
+                "morale_boost": 10,
+                "affected_npcs": [],
+                "message": "Morale boosted from 45 to 55 using speech"
+            }
+        }
+
+
+class FormAllianceRequest(BaseModel):
+    """Request to form alliance with NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to form alliance with")
+    alliance_type: str = Field(
+        default="mutual_support",
+        description="Type of alliance",
+        examples=["mutual_support", "strategic", "loyalty_pact"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_captain",
+                "alliance_type": "mutual_support"
+            }
+            }
+        }
+
+
+class FormAllianceResponse(BaseModel):
+    """Response from alliance formation."""
+
+    success: bool = Field(..., description="Whether alliance formation succeeded")
+    npc_id: str = Field(..., description="NPC ID")
+    npc_name: str = Field(..., description="NPC name")
+    alliance_type: str = Field(..., description="Type of alliance formed")
+    trust_boost: int = Field(..., description="Trust boost from alliance")
+    new_trust_level: int = Field(..., description="New trust level")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "npc_id": "npc_captain",
+                "npc_name": "Captain Elena Chen",
+                "alliance_type": "mutual_support",
+                "trust_boost": 20,
+                "new_trust_level": 75,
+                "message": "Formed mutual_support alliance with Captain Elena Chen"
+            }
+        }
+
+
+class ListConflictsResponse(BaseModel):
+    """Response listing active conflicts."""
+
+    conflicts: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of active conflicts between NPCs"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "conflicts": [
+                    {
+                        "npc1_id": "npc_captain",
+                        "npc1_name": "Captain Chen",
+                        "npc2_id": "npc_engineer",
+                        "npc2_name": "Engineer Okafor",
+                        "severity": 3,
+                        "description": "Intense conflict between Captain Chen and Engineer Okafor"
+                    }
+                ]
+            }
+        }
+
+
+class ProvideTherapyRequest(BaseModel):
+    """Request to provide therapy to NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    therapist_npc_id: str = Field(..., description="NPC providing therapy")
+    patient_npc_id: str = Field(..., description="NPC receiving therapy")
+    therapy_type: str = Field(
+        default="counseling",
+        description="Type of therapy",
+        examples=["counseling", "medical", "rest", "forced_rest"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "therapist_npc_id": "npc_doctor",
+                "patient_npc_id": "npc_engineer",
+                "therapy_type": "counseling"
+            }
+        }
+
+
+class ProvideTherapyResponse(BaseModel):
+    """Response from therapy provision."""
+
+    success: bool = Field(..., description="Whether therapy succeeded")
+    therapist_name: str = Field(..., description="Therapist NPC name")
+    patient_name: str = Field(..., description="Patient NPC name")
+    stress_reduction: int = Field(..., description="Stress reduction amount")
+    recovered_from_breakdown: bool = Field(..., description="Whether NPC recovered from breakdown")
+    morale_boost: int = Field(..., description="Morale boost from recovery")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "therapist_name": "Dr. Sarah Chen",
+                "patient_name": "Engineer Marcus",
+                "stress_reduction": 15,
+                "recovered_from_breakdown": True,
+                "morale_boost": 3,
+                "message": "Dr. Sarah Chen provided counseling to Engineer Marcus. Stress reduced by 15."
+            }
+        }
+
+
+class PlayerCounselingRequest(BaseModel):
+    """Request for player to provide counseling."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to counsel")
+    counseling_approach: str = Field(
+        default="supportive",
+        description="Counseling approach",
+        examples=["supportive", "directive", "empathetic"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_engineer",
+                "counseling_approach": "empathetic"
+            }
+        }
+
+
+class PlayerCounselingResponse(BaseModel):
+    """Response from player counseling."""
+
+    success: bool = Field(..., description="Whether counseling succeeded")
+    npc_name: str = Field(..., description="NPC name")
+    stress_reduction: int = Field(..., description="Stress reduction amount")
+    recovered_from_breakdown: bool = Field(..., description="Whether NPC recovered")
+    trust_increase: int = Field(..., description="Trust increase")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "npc_name": "Engineer Marcus",
+                "stress_reduction": 15,
+                "recovered_from_breakdown": True,
+                "trust_increase": 10,
+                "message": "Provided empathetic counseling to Engineer Marcus. Stress reduced by 15."
+            }
+        }
+
+
+class InvestigateNPCRequest(BaseModel):
+    """Request to investigate NPC."""
+
+    session_id: str = Field(..., description="Current game session ID")
+    npc_id: str = Field(..., description="NPC to investigate")
+    investigation_type: str = Field(
+        default="background",
+        description="Type of investigation",
+        examples=["background", "suspicious_behavior", "hidden_agenda", "secrets"]
+    )
+    investigation_method: str = Field(
+        default="questioning",
+        description="Investigation method",
+        examples=["questioning", "observation", "records_check", "confrontation"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "npc_id": "npc_engineer",
+                "investigation_type": "suspicious_behavior",
+                "investigation_method": "observation"
+            }
+        }
+
+
+class InvestigateNPCResponse(BaseModel):
+    """Response from NPC investigation."""
+
+    success: bool = Field(..., description="Whether investigation succeeded")
+    npc_name: str = Field(..., description="NPC name")
+    findings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Investigation findings"
+    )
+    trust_change: int = Field(..., description="Trust change from investigation")
+    message: str = Field(..., description="Result message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "npc_name": "Engineer Marcus",
+                "findings": [
+                    {
+                        "type": "suspicious_behavior",
+                        "description": "Suspicious indicators: extremely high stress levels",
+                        "confidence": "medium"
+                    }
+                ],
+                "trust_change": -3,
+                "message": "Investigation of Engineer Marcus revealed 1 findings"
+            }
+        }
+
+
+class ListSuspiciousNPCsResponse(BaseModel):
+    """Response listing suspicious NPCs."""
+
+    suspicious_npcs: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of suspicious NPCs with indicators"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "suspicious_npcs": [
+                    {
+                        "npc_id": "npc_engineer",
+                        "npc_name": "Engineer Marcus",
+                        "suspicious_score": 5,
+                        "indicators": ["extremely high stress", "breakdown behavior"]
+                    }
+                ]
+            }
+        }
+
+
+class GetNPCSkillsResponse(BaseModel):
+    """Response with NPC skills."""
+
+    npc_id: str = Field(..., description="NPC ID")
+    npc_name: str = Field(..., description="NPC name")
+    skills: Dict[str, int] = Field(..., description="Skill levels")
+    primary_skills: List[str] = Field(..., description="Primary skills (top 3)")
+    average_skill_level: float = Field(..., description="Average skill level")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "npc_id": "npc_engineer",
+                "npc_name": "Engineer Marcus",
+                "skills": {"engineering": 75, "repair": 80, "science": 45},
+                "primary_skills": ["repair", "engineering"],
+                "average_skill_level": 66.67
             }
         }

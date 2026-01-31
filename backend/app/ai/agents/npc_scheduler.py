@@ -145,9 +145,24 @@ class NPCScheduler:
                 state_changes["current_activity"] = "resting"
                 # Resting reduces stress slightly
                 state_changes["stress_level"] = max(0, npc.stress_level - 2)
+                # Update breakdown state if stress reduced below threshold
+                npc.stress_level = state_changes["stress_level"]
+                npc.update_breakdown_state()
             elif action_type == "move":
                 if target:
                     state_changes["location"] = target
+            
+            # If in breakdown, modify action behavior
+            if npc.is_in_breakdown and npc.breakdown_behavior:
+                breakdown_lower = npc.breakdown_behavior.lower()
+                # Breakdown may cause NPC to refuse certain actions
+                if "refuse" in breakdown_lower and action_type == "help":
+                    # NPC refuses to help
+                    description = f"{npc.name} refuses to help, overwhelmed by stress"
+                    action_type = "continue"
+                elif "panic" in breakdown_lower:
+                    # Panic may cause irrational actions
+                    description = f"{description} (acting erratically due to panic)"
             
             logger.info(f"[NPCScheduler] {npc.name} executed action: {action_type} - {description}")
             

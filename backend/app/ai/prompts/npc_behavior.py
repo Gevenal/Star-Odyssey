@@ -123,8 +123,21 @@ def build_npc_dialogue_prompt(
             stress_info = f"\n⚠️ {npc.name} is under significant stress ({npc.stress_level}%)."
         
         breakdown_info = ""
+        breakdown_instructions = ""
         if npc.is_in_breakdown and npc.breakdown_behavior:
             breakdown_info = f"\n🚨 BREAKDOWN: {npc.breakdown_behavior}"
+            # Add specific breakdown behavior instructions
+            breakdown_lower = npc.breakdown_behavior.lower()
+            if "refuse" in breakdown_lower or "reject" in breakdown_lower:
+                breakdown_instructions = "\n⚠️ CRITICAL: You are in breakdown and may REFUSE to help or cooperate. You might say 'no' or ignore requests."
+            elif "lie" in breakdown_lower or "deceive" in breakdown_lower:
+                breakdown_instructions = "\n⚠️ CRITICAL: You are in breakdown and may LIE or give misleading information."
+            elif "panic" in breakdown_lower or "fear" in breakdown_lower:
+                breakdown_instructions = "\n⚠️ CRITICAL: You are panicking. Your responses should be erratic, fearful, or irrational."
+            elif "aggressive" in breakdown_lower or "hostile" in breakdown_lower:
+                breakdown_instructions = "\n⚠️ CRITICAL: You are in breakdown and may be AGGRESSIVE or HOSTILE in your responses."
+            else:
+                breakdown_instructions = f"\n⚠️ CRITICAL: You are in breakdown state. Your behavior: {npc.breakdown_behavior}"
         
         # Get current activity
         activity_info = ""
@@ -151,7 +164,7 @@ PERSONALITY & BEHAVIOR:
 
 CURRENT STATE:
 - Health: {npc.health}%
-- Stress Level: {npc.stress_level}%{stress_info}{breakdown_info}
+- Stress Level: {npc.stress_level}%{stress_info}{breakdown_info}{breakdown_instructions}
 - Location: {npc.location}{activity_info}{goals_info}
 
 RELATIONSHIP WITH PLAYER:
@@ -170,7 +183,7 @@ INSTRUCTIONS:
 3. Consider your current stress level and state of mind
 4. Keep your response concise (1-3 sentences, max 100 words)
 5. Stay in character - don't break the fourth wall
-6. If you're in breakdown state, your behavior should reflect: {npc.breakdown_behavior if npc.is_in_breakdown else "N/A"}
+6. {breakdown_instructions if breakdown_instructions else "You are functioning normally."}
 
 Respond now as {npc.name}:"""
         
@@ -232,10 +245,21 @@ WORLD STATE:
         
         # Stress and breakdown info
         stress_info = ""
+        breakdown_constraints = ""
         if npc.stress_level >= 75:
             stress_info = f"\n⚠️ CRITICAL STRESS: {npc.stress_level}% - You are highly stressed and may not think clearly."
         if npc.is_in_breakdown:
             stress_info += f"\n🚨 BREAKDOWN STATE: {npc.breakdown_behavior}"
+            # Add breakdown behavior constraints
+            breakdown_lower = npc.breakdown_behavior.lower()
+            if "refuse" in breakdown_lower or "reject" in breakdown_lower:
+                breakdown_constraints = "\n⚠️ BREAKDOWN CONSTRAINT: You may REFUSE to help others or follow orders. Consider choosing 'rest' or 'continue' instead of helping."
+            elif "panic" in breakdown_lower or "fear" in breakdown_lower:
+                breakdown_constraints = "\n⚠️ BREAKDOWN CONSTRAINT: You are panicking. Your actions may be irrational or focused on self-preservation."
+            elif "aggressive" in breakdown_lower:
+                breakdown_constraints = "\n⚠️ BREAKDOWN CONSTRAINT: You are in breakdown and may act aggressively or destructively."
+            elif "isolate" in breakdown_lower or "lock" in breakdown_lower:
+                breakdown_constraints = "\n⚠️ BREAKDOWN CONSTRAINT: You are isolating yourself. Consider actions that keep you away from others."
         
         prompt = f"""You are {npc.name}, the {npc.role} on a damaged spaceship in crisis.
 
@@ -244,7 +268,7 @@ PERSONALITY & BEHAVIOR:
 
 YOUR CURRENT STATE:
 - Health: {npc.health}%
-- Stress: {npc.stress_level}%{stress_info}
+- Stress: {npc.stress_level}%{stress_info}{breakdown_constraints}
 - Location: {npc.location}{location_info}
 - Current Activity: {npc.current_activity or "None"}
 - Goals: {', '.join(npc.goals) if npc.goals else "None"}
@@ -257,6 +281,7 @@ Decide what action you should take this turn based on:
 2. Your goals and responsibilities
 3. The crisis situation
 4. Your location and who else is there
+5. Your breakdown state (if applicable){breakdown_constraints}
 
 Choose ONE action from:
 - Continue current activity (if applicable)
@@ -267,6 +292,8 @@ Choose ONE action from:
 - Investigate something suspicious
 - Communicate with crew
 - Other action appropriate to your role and situation
+
+{breakdown_constraints}
 
 Respond in JSON format:
 {{
