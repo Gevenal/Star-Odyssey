@@ -8,13 +8,15 @@ from app.api.schemas import (
     GameStartResponse,
     AvailableActionsResponse,
     TurnEndResponse,
+    NPCTalkRequest,
+    NPCTalkResponse,
 )
 from app.models.action import ActionDefinition, PlayerAction
 from app.models.response import GameActionResponse
 from app.models.game_state import GameState
 from app.core.session_state_manager import SessionStateManager
 from app.utils.state_converter import StateConverter
-from app.api.deps import get_session_manager, get_game_loop
+from app.api.deps import get_session_manager, get_game_loop, get_gemini_client
 import json
 from pathlib import Path
 from pydantic import ValidationError
@@ -428,3 +430,182 @@ async def end_turn(
         critical_alerts=[],
         turn_number=gsm.get("game_meta.current_turn"),
     )
+
+
+@router.post(
+    "/npc/{npc_id}/talk",
+    response_model=NPCTalkResponse,
+    summary="Talk to an NPC",
+    description="Send a message to an NPC and receive their dialogue response."
+)
+async def talk_to_npc(
+    npc_id: str,
+    request: NPCTalkRequest,
+    session_mgr: SessionStateManager = Depends(get_session_manager),
+    gemini_client = Depends(get_gemini_client)
+) -> NPCTalkResponse:
+    """
+    Talk to an NPC.
+
+    - Loads game state
+    - Creates NPCAgent for the NPC
+    - Generates dialogue response using AI
+    - Returns NPC's response with relationship info
+
+    Args:
+        npc_id: NPC identifier
+        request: Talk request with session_id and message
+        session_mgr: Session state manager
+        gemini_client: Gemini client for AI generation
+
+    Returns:
+        NPCTalkResponse with NPC dialogue and relationship info
+
+    Raises:
+        HTTPException 404: If session or NPC not found
+        HTTPException 400: If NPC is not available (dead, etc.)
+    """
+    # 1. Load game state
+    try:
+        state_data = await session_mgr.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    # 2. Convert to GameState
+    game_state = StateConverter.snapshot_to_game_state(state_data, request.session_id)
+    
+    # 3. Get NPC
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    if not npc.alive:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{npc.name} is not available"
+        )
+    
+    # 4. Create NPCAgent and generate dialogue
+    from app.ai.agents.npc_agent import NPCAgent
+    from app.utils.npc_secret_manager import NPCSecretManager
+    from app.core.game_state_manager import GameStateManager
+    
+    agent = NPCAgent(gemini_client=gemini_client, npc_id=npc_id)
+    
+    try:
+        dialogue = await agent.generate_dialogue(
+            player_input=request.message,
+            game_state=game_state
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate NPC dialogue: {str(e)}"
+        )
+    
+    # 5. Check for secret revelation after dialogue
+    context = {
+        "action_type": "dialogue",
+        "player_message": request.message
+    }
+    revealed_secrets = NPCSecretManager.check_and_reveal_secrets(
+        npc, game_state, context
+    )
+    
+    # Update secrets in database if any were revealed
+    if revealed_secrets:
+        # Reload state to update
+        state_data = await session_mgr.get_state(request.session_id)
+        gs = GameStateManager()
+        gs.load_snapshot(state_data)
+        
+        # Update secret known_by_player flags
+        for secret in revealed_secrets:
+            secret_idx = next(
+                (i for i, s in enumerate(npc.secrets) if s.id == secret.id),
+                None
+            )
+            if secret_idx is not None:
+                gs.set(f"npcs.{npc_id}.secrets.{secret_idx}.known_by_player", True, validate=False)
+        
+        # Update player's discovered_secrets
+        NPCSecretManager.update_player_discovered_secrets(
+            game_state, revealed_secrets, npc_id
+        )
+        gs.set("player.discovered_secrets", game_state.player.discovered_secrets, validate=False)
+        
+        # Save updated state
+        updated_snapshot = gs.get_snapshot()
+        await session_mgr.update_state(request.session_id, updated_snapshot)
+    
+    # 6. Get relationship info
+    relationship_level = 0
+    if "player" in npc.relationships:
+        relationship_level = npc.relationships["player"].trust_level
+    
+    disposition = npc.get_player_disposition().value if hasattr(npc.get_player_disposition(), 'value') else str(npc.get_player_disposition())
+    
+    # Include revealed secrets info in response
+    revealed_secret_ids = [s.id for s in revealed_secrets] if revealed_secrets else []
+    
+    return NPCTalkResponse(
+        npc_id=npc_id,
+        npc_name=npc.name,
+        dialogue=dialogue,
+        relationship_level=relationship_level,
+        disposition=disposition,
+        secrets_revealed=revealed_secret_ids  # Add this field if schema supports it
+    )
+
+
+@router.get(
+    "/npc/{npc_id}",
+    summary="Get NPC information",
+    description="Get detailed information about a specific NPC including personality, relationships, and current state."
+)
+async def get_npc_info(
+    npc_id: str,
+    session_id: str,
+    session_mgr: SessionStateManager = Depends(get_session_manager)
+):
+    """
+    Get NPC information.
+
+    Args:
+        npc_id: NPC identifier
+        session_id: Game session ID
+        session_mgr: Session state manager
+
+    Returns:
+        NPCState: Complete NPC state information
+
+    Raises:
+        HTTPException 404: If session or NPC not found
+    """
+    # 1. Load game state
+    try:
+        state_data = await session_mgr.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    # 2. Convert to GameState
+    game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    # 3. Get NPC
+    npc = game_state.npcs.get(npc_id)
+    if not npc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"NPC {npc_id} not found"
+        )
+    
+    return npc

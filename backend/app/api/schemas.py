@@ -338,3 +338,64 @@ class DebugExplainRisksResponse(BaseModel):
         default_factory=list,
         description="AI-recommended action IDs"
     )
+
+
+class NPCTalkRequest(BaseModel):
+    """Request to talk to an NPC."""
+
+    session_id: str = Field(
+        ...,
+        description="Game session ID"
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Player's message to the NPC",
+        examples=["What's the status of the reactor?"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "session_id": "sess_abc123",
+                "message": "What's the status of the reactor?"
+            }
+        }
+
+
+class NPCTalkResponse(BaseModel):
+    """Response from NPC dialogue."""
+
+    npc_id: str = Field(
+        ...,
+        description="NPC identifier"
+    )
+    npc_name: str = Field(
+        ...,
+        description="NPC's name"
+    )
+    dialogue: str = Field(
+        ...,
+        description="NPC's response dialogue"
+    )
+    relationship_level: int = Field(
+        ...,
+        description="Current trust/relationship level with player (-100 to 100)"
+    )
+    disposition: str = Field(
+        ...,
+        description="NPC's disposition toward player",
+        examples=["friendly", "neutral", "hostile"]
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "npc_id": "npc_captain",
+                "npc_name": "Captain Elena Chen",
+                "dialogue": "The reactor is stable for now, but we need to keep monitoring it closely.",
+                "relationship_level": 50,
+                "disposition": "friendly"
+            }
+        }

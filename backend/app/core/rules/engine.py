@@ -21,12 +21,16 @@ class RulesEngine:
         self.rules: List[BaseRule] = []
         from app.core.rules.resource_rules import ResourceAvailabilityRule
         from app.core.rules.location_rules import LocationTopologyRule
+        from app.core.rules.npc_rules import NPCInteractionRule
 
         if game_data_loader is not None:
             self.register_rule(ResourceAvailabilityRule(game_data_loader))
             self.register_rule(LocationTopologyRule(game_data_loader))
         else:
             self.register_rule(ResourceAvailabilityRule())
+        
+        # Always register NPC interaction rule
+        self.register_rule(NPCInteractionRule())
 
     def register_rule(self, rule: BaseRule):
         """
