@@ -60,28 +60,41 @@ async def dump_state(
         HTTPException 403: If not in development mode
         HTTPException 404: If session not found
     """
-    # TODO: Implement state dump
-    # game_state = await state_manager.get_state(session_id)
-    # if not game_state:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail=f"Session {session_id} not found"
-    #     )
-
-    # cache_data = await state_manager.get_from_cache(session_id)
-    # internal_flags = await state_manager.get_internal_flags(session_id)
-
-    # return DebugStateResponse(
-    #     session_id=session_id,
-    #     game_state=game_state,
-    #     internal_flags=internal_flags,
-    #     ai_context_size=calculate_context_size(game_state),
-    #     cache_status={"cached": cache_data is not None, "ttl": ...}
-    # )
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="State dump not yet implemented"
+    try:
+        state_data = await state_manager.get_state(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    
+    # Convert to GameState model
+    game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    
+    # Get cache status
+    cache_data = await state_manager.get_from_cache(session_id) if state_manager.redis_cache else None
+    
+    # Extract internal flags from state
+    internal_flags = {
+        "turn": state_data.get("turn", 0),
+        "game_phase": state_data.get("state", {}).get("game_meta", {}).get("game_phase", "unknown"),
+        "ending_id": state_data.get("state", {}).get("game_meta", {}).get("ending_id"),
+        "player_flags": state_data.get("state", {}).get("player", {}).get("flags", {}),
+        "global_flags": state_data.get("state", {}).get("world", {}).get("global_flags", {}),
+    }
+    
+    # Estimate AI context size (rough approximation)
+    try:
+        ai_context_size = len(json.dumps(state_data, default=str)) // 4  # ~4 chars per token
+    except Exception:
+        ai_context_size = 500  # fallback estimate
+    
+    return DebugStateResponse(
+        session_id=session_id,
+        game_state=game_state,
+        internal_flags=internal_flags,
+        ai_context_size=ai_context_size,
+        cache_status={"cached": cache_data is not None, "redis_enabled": state_manager.redis_cache is not None}
     )
 
 
@@ -103,7 +116,7 @@ async def set_state_variable(
 
     Examples:
     - `player.health` = 10 (set player health to critical)
-    - `world.resources.oxygen_level.current` = 5.0 (simulate oxygen crisis)
+    - `resources.oxygen_level` = 5.0 (simulate oxygen crisis)
     - `npcs.npc_captain.alive` = False (kill an NPC for testing)
 
     Args:
@@ -118,29 +131,43 @@ async def set_state_variable(
         HTTPException 404: If session not found
         HTTPException 400: If variable path is invalid
     """
-    # TODO: Implement state variable setting
-    # game_state = await state_manager.get_state(request.session_id)
-    # if not game_state:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail=f"Session {request.session_id} not found"
-    #     )
-
-    # old_value = get_nested_value(game_state, request.variable_path)
-    # set_nested_value(game_state, request.variable_path, request.value)
-    # await state_manager.update_state(request.session_id, game_state)
-
-    # return {
-    #     "variable_path": request.variable_path,
-    #     "old_value": old_value,
-    #     "new_value": request.value,
-    #     "updated": True
-    # }
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Set state variable not yet implemented"
-    )
+    try:
+        state_data = await state_manager.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    # Load into GameStateManager for easy path manipulation
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    
+    # Get old value
+    try:
+        old_value = gs.get(request.variable_path)
+    except (KeyError, TypeError):
+        old_value = None
+    
+    # Set new value
+    try:
+        gs.set(request.variable_path, request.value, validate=False)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid variable path '{request.variable_path}': {str(e)}"
+        )
+    
+    # Save updated state
+    snapshot = gs.get_snapshot()
+    await state_manager.update_state(request.session_id, snapshot)
+    
+    return {
+        "variable_path": request.variable_path,
+        "old_value": old_value,
+        "new_value": request.value,
+        "updated": True
+    }
 
 
 @router.post(
@@ -151,61 +178,119 @@ async def set_state_variable(
 )
 async def trigger_event(
     request: DebugTriggerEventRequest,
-    game_loop=Depends(get_game_loop)
+    state_manager=Depends(get_session_manager),
+    gemini_client=Depends(get_gemini_client)
 ) -> Dict[str, Any]:
     """
     Force trigger a random event.
 
-    Useful for testing event handling and outcomes without waiting for
-    natural event conditions to be met.
+    Generates and applies an event using AI based on the event_id hint.
+    Useful for testing event handling and narrative outcomes.
 
     Args:
-        request: Event ID and whether to skip trigger conditions
-        game_loop: GameLoop dependency
+        request: Event ID (used as hint for AI generation) and skip_conditions flag
+        state_manager: StateManager dependency
+        gemini_client: GeminiClient dependency
 
     Returns:
-        Event result and state changes
+        Event result with narration and state changes
 
     Raises:
         HTTPException 403: If not in development mode
-        HTTPException 404: If session or event not found
-        HTTPException 400: If event conditions not met (when skip_conditions=False)
+        HTTPException 404: If session not found
     """
-    # TODO: Implement event triggering
-    # game_state = await game_loop.get_state(request.session_id)
-    # if not game_state:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail=f"Session {request.session_id} not found"
-    #     )
+    try:
+        state_data = await state_manager.get_state(request.session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {request.session_id} not found"
+        )
+    
+    # Load state
+    gs = GameStateManager()
+    gs.load_snapshot(state_data)
+    game_state = StateConverter.snapshot_to_game_state(gs.get_snapshot(), request.session_id)
+    
+    # Generate event narration using AI
+    event_prompt = f"""Generate a dramatic random event for a sci-fi survival game.
 
-    # event = event_registry.get_event(request.event_id)
-    # if not event:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND,
-    #         detail=f"Event {request.event_id} not found"
-    #     )
+Event type hint: {request.event_id}
+Player location: {game_state.player.location if game_state.player else 'bridge'}
+Current turn: {state_data.get('turn', 0)}
 
-    # if not request.skip_conditions:
-    #     can_trigger = await event_manager.check_conditions(event, game_state)
-    #     if not can_trigger:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST,
-    #             detail=f"Event {request.event_id} conditions not met"
-    #         )
+Generate a short event (2-3 sentences) and suggest one state change.
+Format your response as JSON:
+{{
+    "event_name": "Brief event title",
+    "narration": "The dramatic event description...",
+    "state_change": {{
+        "path": "resources.oxygen_level",
+        "delta": -5
+    }}
+}}"""
 
-    # result = await event_manager.trigger_event(request.event_id, game_state)
-    # return {
-    #     "event_id": request.event_id,
-    #     "triggered": True,
-    #     "result": result,
-    #     "state_changes": result.state_changes
-    # }
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Trigger event not yet implemented"
-    )
+    try:
+        ai_response = await gemini_client.generate(
+            prompt=event_prompt,
+            model="flash",
+            temperature=0.9
+        )
+        
+        # Parse AI response
+        if "```json" in ai_response:
+            json_start = ai_response.find("```json") + 7
+            json_end = ai_response.find("```", json_start)
+            ai_response = ai_response[json_start:json_end].strip()
+        elif "```" in ai_response:
+            json_start = ai_response.find("```") + 3
+            json_end = ai_response.find("```", json_start)
+            ai_response = ai_response[json_start:json_end].strip()
+        
+        event_data = json.loads(ai_response)
+        
+        # Apply state change if provided
+        state_changes = []
+        if "state_change" in event_data and event_data["state_change"]:
+            change = event_data["state_change"]
+            path = change.get("path", "")
+            delta = change.get("delta", 0)
+            
+            if path and delta:
+                try:
+                    old_value = gs.get(path)
+                    if isinstance(old_value, (int, float)):
+                        new_value = old_value + delta
+                        gs.set(path, new_value, validate=False)
+                        state_changes.append({
+                            "path": path,
+                            "old_value": old_value,
+                            "new_value": new_value
+                        })
+                except:
+                    pass
+        
+        # Save updated state
+        await state_manager.update_state(request.session_id, gs.get_snapshot())
+        
+        return {
+            "event_id": request.event_id,
+            "event_name": event_data.get("event_name", "Unknown Event"),
+            "triggered": True,
+            "narration": event_data.get("narration", "Something happened..."),
+            "state_changes": state_changes
+        }
+        
+    except Exception as e:
+        # Fallback to simple event
+        return {
+            "event_id": request.event_id,
+            "event_name": f"Debug Event: {request.event_id}",
+            "triggered": True,
+            "narration": f"A {request.event_id.replace('_', ' ')} event occurs on the ship.",
+            "state_changes": [],
+            "error": str(e)
+        }
 
 
 @router.get(
@@ -319,6 +404,7 @@ async def explain_risks(
 async def test_ai_prompt(
     prompt: str,
     model: str = "pro",
+    temperature: float = 0.7,
     gemini_client=Depends(get_gemini_client)
 ) -> Dict[str, Any]:
     """
@@ -330,6 +416,7 @@ async def test_ai_prompt(
     Args:
         prompt: Raw prompt text to send to AI
         model: Model to use ("pro" for narration, "flash" for NPCs)
+        temperature: Temperature for generation (0.0-1.0)
         gemini_client: GeminiClient dependency
 
     Returns:
@@ -339,26 +426,28 @@ async def test_ai_prompt(
         HTTPException 403: If not in development mode
         HTTPException 400: If invalid model specified
     """
-    # TODO: Implement AI prompt testing
-    # if model not in ["pro", "flash"]:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="Model must be 'pro' or 'flash'"
-    #     )
-
-    # if model == "pro":
-    #     response = await gemini_client.generate_narration(prompt)
-    # else:
-    #     response = await gemini_client.generate_npc_response(prompt)
-
-    # return {
-    #     "prompt": prompt,
-    #     "model": model,
-    #     "response": response,
-    #     "response_length": len(response)
-    # }
-
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="AI prompt testing not yet implemented"
-    )
+    if model not in ["pro", "flash"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Model must be 'pro' or 'flash'"
+        )
+    
+    try:
+        response = await gemini_client.generate(
+            prompt=prompt,
+            model=model,
+            temperature=temperature
+        )
+        
+        return {
+            "prompt": prompt[:200] + "..." if len(prompt) > 200 else prompt,
+            "model": model,
+            "temperature": temperature,
+            "response": response,
+            "response_length": len(response)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI generation failed: {str(e)}"
+        )

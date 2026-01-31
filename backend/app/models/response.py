@@ -1,11 +1,25 @@
 """Response models."""
 
 from typing import List, Optional, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.models.enums import Mood
 
 
-class ResourceChange(BaseModel):
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
+
+class CamelCaseModel(BaseModel):
+    """Base model that converts snake_case to camelCase in JSON output."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
+
+
+class ResourceChange(CamelCaseModel):
     """Represents a change to a resource."""
 
     resource_name: str = Field(
@@ -33,7 +47,7 @@ class ResourceChange(BaseModel):
         }
 
 
-class StateChange(BaseModel):
+class StateChange(CamelCaseModel):
     """Represents a change to game state."""
 
     entity_type: Literal["player", "npc", "world", "location"] = Field(
@@ -76,7 +90,7 @@ class StateChange(BaseModel):
         }
 
 
-class NPCReaction(BaseModel):
+class NPCReaction(CamelCaseModel):
     """NPC reaction to player action."""
 
     npc_id: str = Field(
@@ -110,7 +124,7 @@ class NPCReaction(BaseModel):
         }
 
 
-class GameActionResponse(BaseModel):
+class GameActionResponse(CamelCaseModel):
     """Response to a player action."""
 
     success: bool = Field(

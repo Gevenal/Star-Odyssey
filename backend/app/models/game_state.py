@@ -1,14 +1,15 @@
 """Game state model."""
 
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.models.base import CamelCaseModel
 from app.models.enums import GamePhase, TurnPhase
 from app.models.player import PlayerState
 from app.models.npc import NPCState
 from app.models.world import WorldState
 
 
-class GameState(BaseModel):
+class GameState(CamelCaseModel):
     """Complete game state snapshot."""
 
     session_id: str = Field(

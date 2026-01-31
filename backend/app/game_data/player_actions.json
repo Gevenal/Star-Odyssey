@@ -1,10 +1,10 @@
 {
-  "_comment": "Player action definitions - TODO: Expand with full action set",
-  "_version": "1.0.0",
+  "_comment": "Complete player action definitions with RulesEngine requirements",
+  "_version": "2.0.0",
   "actions": [
     {
       "id": "explore_location",
-      "name": "Explore Current Location",
+      "name": "Explore Area",
       "category": "investigation",
       "description": "Carefully examine your current location for useful items, clues, or hazards.",
       "requirements": {
@@ -17,6 +17,24 @@
         "Find nothing of value"
       ],
       "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "search_containers",
+      "name": "Search Containers",
+      "category": "investigation",
+      "description": "Search through storage containers and lockers for supplies.",
+      "requirements": {
+        "location": "cargo_bay,crew_quarters,engineering",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Find repair materials",
+        "Find medical supplies",
+        "Find personal items with clues",
+        "Containers are empty"
+      ],
+      "cooldown": 2,
       "one_time": false
     },
     {
@@ -37,11 +55,63 @@
       "one_time": false
     },
     {
+      "id": "talk_to_captain",
+      "name": "Consult Captain Chen",
+      "category": "social_interaction",
+      "description": "Seek guidance from Captain Elena Chen.",
+      "requirements": {
+        "npc_present": "npc_captain",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Receive orders or objectives",
+        "Learn about ship situation",
+        "Gain captain's trust"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "talk_to_engineer",
+      "name": "Consult Marcus",
+      "category": "social_interaction",
+      "description": "Talk to Marcus 'Wrench' Okafor about technical matters.",
+      "requirements": {
+        "npc_present": "npc_engineer",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Learn about ship systems",
+        "Get repair advice",
+        "Receive technical item"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "talk_to_doctor",
+      "name": "Consult Dr. Tanaka",
+      "category": "social_interaction",
+      "description": "Speak with Dr. Yuki Tanaka about medical concerns.",
+      "requirements": {
+        "npc_present": "npc_medic",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Receive medical treatment",
+        "Learn about crew health",
+        "Get medical supplies"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
       "id": "rest",
       "name": "Rest and Recover",
       "category": "rest_recovery",
       "description": "Take time to rest, reducing stress and recovering some health.",
       "requirements": {
+        "location": "crew_quarters,med_bay",
         "time_cost": 2
       },
       "possible_outcomes": [
@@ -53,10 +123,26 @@
       "one_time": false
     },
     {
+      "id": "quick_rest",
+      "name": "Take a Break",
+      "category": "rest_recovery",
+      "description": "Take a quick break to catch your breath.",
+      "requirements": {
+        "time_cost": 1,
+        "max_stress": 80
+      },
+      "possible_outcomes": [
+        "Slightly reduce stress",
+        "Clear your head"
+      ],
+      "cooldown": 1,
+      "one_time": false
+    },
+    {
       "id": "check_systems",
       "name": "Check Ship Systems",
       "category": "investigation",
-      "description": "Review ship system status and diagnostics.",
+      "description": "Review ship system status and diagnostics from the command console.",
       "requirements": {
         "location": "command_bridge",
         "time_cost": 1
@@ -64,9 +150,481 @@
       "possible_outcomes": [
         "Identify critical issues",
         "Spot degrading systems early",
-        "Discover sabotage"
+        "Discover sabotage signs"
       ],
       "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "check_engineering_diagnostics",
+      "name": "Run Diagnostics",
+      "category": "investigation",
+      "description": "Access the engineering diagnostics terminal for detailed system analysis.",
+      "requirements": {
+        "location": "engineering",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Find exact failure points",
+        "Discover hidden damage",
+        "Prioritize repairs"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "repair_life_support",
+      "name": "Repair Life Support",
+      "category": "resource_management",
+      "description": "Attempt to repair or improve the life support system.",
+      "requirements": {
+        "location": "engineering",
+        "items": ["repair_kit"],
+        "min_resource_levels": {"power_level": 15.0},
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Fully restore life support",
+        "Partial repair",
+        "Repair fails, materials consumed"
+      ],
+      "cooldown": 5,
+      "one_time": false
+    },
+    {
+      "id": "repair_reactor",
+      "name": "Stabilize Reactor",
+      "category": "resource_management",
+      "description": "Work on stabilizing the ship's reactor core.",
+      "requirements": {
+        "location": "reactor_room",
+        "items": ["repair_kit"],
+        "min_resource_levels": {"power_level": 10.0},
+        "min_health": 30,
+        "time_cost": 3
+      },
+      "possible_outcomes": [
+        "Reactor stabilized, power restored",
+        "Temporary fix only",
+        "Radiation exposure increases stress"
+      ],
+      "cooldown": 8,
+      "one_time": false
+    },
+    {
+      "id": "repair_navigation",
+      "name": "Repair Navigation",
+      "category": "resource_management",
+      "description": "Fix the navigation systems to improve course corrections.",
+      "requirements": {
+        "location": "command_bridge",
+        "items": ["repair_kit"],
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Navigation restored",
+        "Partial fix",
+        "Discover course was wrong"
+      ],
+      "cooldown": 5,
+      "one_time": false
+    },
+    {
+      "id": "scavenge_supplies",
+      "name": "Scavenge for Supplies",
+      "category": "resource_management",
+      "description": "Search the area thoroughly for any useful supplies.",
+      "requirements": {
+        "location": "cargo_bay,mess_hall",
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Find food and water",
+        "Find repair materials",
+        "Find medical supplies",
+        "Area already depleted"
+      ],
+      "cooldown": 4,
+      "one_time": false
+    },
+    {
+      "id": "ration_distribution",
+      "name": "Distribute Rations",
+      "category": "resource_management",
+      "description": "Organize and distribute food and water to crew members.",
+      "requirements": {
+        "location": "mess_hall",
+        "min_resource_levels": {"food_water": 20.0},
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Crew morale improves",
+        "Arguments over rations",
+        "Someone hoards supplies"
+      ],
+      "cooldown": 6,
+      "one_time": false
+    },
+    {
+      "id": "use_medical_scanner",
+      "name": "Use Medical Scanner",
+      "category": "investigation",
+      "description": "Scan yourself or others for injuries and health issues.",
+      "requirements": {
+        "location": "med_bay",
+        "min_resource_levels": {"power_level": 5.0},
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Discover hidden injury",
+        "Confirm good health",
+        "Find signs of infection"
+      ],
+      "cooldown": 1,
+      "one_time": false
+    },
+    {
+      "id": "treat_injuries",
+      "name": "Treat Injuries",
+      "category": "resource_management",
+      "description": "Use medical supplies to treat injuries and restore health.",
+      "requirements": {
+        "location": "med_bay",
+        "min_resource_levels": {"medical_supplies": 10.0},
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Health restored significantly",
+        "Partial recovery",
+        "Treatment complications"
+      ],
+      "cooldown": 2,
+      "one_time": false
+    },
+    {
+      "id": "access_oracle",
+      "name": "Access ORACLE Terminal",
+      "category": "investigation",
+      "description": "Interface with the ship's ORACLE AI system.",
+      "requirements": {
+        "location": "command_bridge,engineering",
+        "min_resource_levels": {"power_level": 10.0},
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Receive cryptic guidance",
+        "Learn ship history",
+        "ORACLE reveals hidden information"
+      ],
+      "cooldown": 2,
+      "one_time": false
+    },
+    {
+      "id": "send_distress_signal",
+      "name": "Send Distress Signal",
+      "category": "resource_management",
+      "description": "Attempt to send a distress signal to nearby ships or stations.",
+      "requirements": {
+        "location": "command_bridge",
+        "min_resource_levels": {"power_level": 20.0},
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Signal sent successfully",
+        "Partial transmission",
+        "Communications array damaged"
+      ],
+      "cooldown": 10,
+      "one_time": false
+    },
+    {
+      "id": "check_airlock",
+      "name": "Inspect Airlock",
+      "category": "investigation",
+      "description": "Check the cargo bay airlock seals and safety systems.",
+      "requirements": {
+        "location": "cargo_bay",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Airlock secure",
+        "Find minor breach",
+        "Discover sabotage"
+      ],
+      "cooldown": 3,
+      "one_time": false
+    },
+    {
+      "id": "seal_breach",
+      "name": "Seal Hull Breach",
+      "category": "resource_management",
+      "description": "Use repair materials to seal a detected hull breach.",
+      "requirements": {
+        "items": ["repair_kit"],
+        "min_resource_levels": {"repair_materials": 15.0},
+        "required_flags": {"breach_detected": true},
+        "time_cost": 3
+      },
+      "possible_outcomes": [
+        "Breach fully sealed",
+        "Temporary patch only",
+        "Repair fails, oxygen loss continues"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "observe_stars",
+      "name": "Observe the Stars",
+      "category": "rest_recovery",
+      "description": "Take a moment at the observation deck to gaze at the stars and reflect.",
+      "requirements": {
+        "location": "observation_deck",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Reduce stress through contemplation",
+        "Notice something unusual in space",
+        "Feel isolated and alone"
+      ],
+      "cooldown": 2,
+      "one_time": false
+    },
+    {
+      "id": "investigate_cryo_pods",
+      "name": "Investigate Cryo Pods",
+      "category": "investigation",
+      "description": "Examine the cryo pods to understand what happened during the emergency.",
+      "requirements": {
+        "location": "cryo_bay",
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Find clues about the incident",
+        "Discover malfunctioning pod",
+        "Find personal effects"
+      ],
+      "cooldown": 5,
+      "one_time": false
+    },
+    {
+      "id": "move_to_command_bridge",
+      "name": "Go to Command Bridge",
+      "category": "movement",
+      "description": "Move to the ship's command bridge.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at command bridge"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_engineering",
+      "name": "Go to Engineering",
+      "category": "movement",
+      "description": "Move to the engineering bay.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at engineering"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_med_bay",
+      "name": "Go to Medical Bay",
+      "category": "movement",
+      "description": "Move to the medical bay.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at medical bay"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_cargo_bay",
+      "name": "Go to Cargo Bay",
+      "category": "movement",
+      "description": "Move to the cargo bay.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at cargo bay"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_crew_quarters",
+      "name": "Go to Crew Quarters",
+      "category": "movement",
+      "description": "Move to the crew quarters.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at crew quarters"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_mess_hall",
+      "name": "Go to Mess Hall",
+      "category": "movement",
+      "description": "Move to the mess hall.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at mess hall"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_reactor_room",
+      "name": "Go to Reactor Room",
+      "category": "movement",
+      "description": "Move to the reactor room. Caution: radiation hazard.",
+      "requirements": {
+        "time_cost": 1,
+        "min_health": 20
+      },
+      "possible_outcomes": ["Arrive at reactor room"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "move_to_observation_deck",
+      "name": "Go to Observation Deck",
+      "category": "movement",
+      "description": "Move to the observation deck.",
+      "requirements": {
+        "time_cost": 1
+      },
+      "possible_outcomes": ["Arrive at observation deck"],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "craft_repair_kit",
+      "name": "Craft Repair Kit",
+      "category": "resource_management",
+      "description": "Assemble a repair kit from available materials.",
+      "requirements": {
+        "location": "engineering,cargo_bay",
+        "min_resource_levels": {"repair_materials": 25.0},
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Repair kit crafted successfully",
+        "Partial kit, less effective",
+        "Crafting fails"
+      ],
+      "cooldown": 5,
+      "one_time": false
+    },
+    {
+      "id": "mediate_conflict",
+      "name": "Mediate Crew Conflict",
+      "category": "social_interaction",
+      "description": "Attempt to resolve tensions between arguing crew members.",
+      "requirements": {
+        "required_flags": {"crew_conflict": true},
+        "max_stress": 70,
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Conflict resolved, morale improves",
+        "Partial resolution",
+        "Conflict escalates"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "hold_crew_meeting",
+      "name": "Hold Crew Meeting",
+      "category": "social_interaction",
+      "description": "Gather surviving crew for a status meeting and planning session.",
+      "requirements": {
+        "location": "mess_hall,command_bridge",
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Crew coordination improves",
+        "Someone reveals important info",
+        "Arguments break out"
+      ],
+      "cooldown": 8,
+      "one_time": false
+    },
+    {
+      "id": "investigate_anomaly",
+      "name": "Investigate Anomaly",
+      "category": "investigation",
+      "description": "Look into the strange sensor readings or unusual occurrence.",
+      "requirements": {
+        "required_flags": {"anomaly_detected": true},
+        "min_health": 40,
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Discover the source",
+        "Find nothing definitive",
+        "Trigger dangerous event"
+      ],
+      "cooldown": 0,
+      "one_time": false
+    },
+    {
+      "id": "barricade_area",
+      "name": "Barricade Area",
+      "category": "resource_management",
+      "description": "Set up barricades to secure the current location.",
+      "requirements": {
+        "min_resource_levels": {"repair_materials": 10.0},
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Area secured",
+        "Weak barricade",
+        "Discover threat while building"
+      ],
+      "cooldown": 10,
+      "one_time": false
+    },
+    {
+      "id": "hack_terminal",
+      "name": "Hack Terminal",
+      "category": "investigation",
+      "description": "Attempt to bypass security and access restricted data.",
+      "requirements": {
+        "location": "command_bridge,engineering",
+        "min_resource_levels": {"power_level": 5.0},
+        "time_cost": 2
+      },
+      "possible_outcomes": [
+        "Access granted - discover secrets",
+        "Partial access",
+        "Security lockout triggered"
+      ],
+      "cooldown": 5,
+      "one_time": false
+    },
+    {
+      "id": "conserve_power",
+      "name": "Initiate Power Conservation",
+      "category": "resource_management",
+      "description": "Shut down non-essential systems to conserve power.",
+      "requirements": {
+        "location": "engineering,command_bridge",
+        "time_cost": 1
+      },
+      "possible_outcomes": [
+        "Power drain reduced",
+        "Some systems offline",
+        "Conservation mode fails"
+      ],
+      "cooldown": 12,
       "one_time": false
     }
   ]

@@ -57,11 +57,18 @@ def get_rules_engine():
     return RulesEngine(game_data_loader=get_game_data_loader())
 
 
+def get_game_data_loader():
+    """Get GameDataLoader singleton."""
+    from app.game_data.loader import get_game_data_loader as _get
+    return _get()
+
+
 def get_game_loop():
-    """Get GameLoop wired to SessionStateManager, RulesEngine, GeminiClient."""
+    """Get GameLoop wired to SessionStateManager, RulesEngine, GeminiClient, and GameDataLoader."""
     from app.core.game_loop import GameLoop
     return GameLoop(
         state_manager=get_session_manager(),
         rules_engine=get_rules_engine(),
         gemini_client=get_gemini_client(),
+        game_data_loader=get_game_data_loader(),
     )

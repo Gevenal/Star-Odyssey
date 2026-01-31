@@ -1,57 +1,72 @@
 """Action models."""
 
 from typing import List, Optional, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.models.enums import ActionCategory
 
 
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
+
 class PlayerAction(BaseModel):
-    """Player action input."""
+    """Player action input. Accepts both snake_case and camelCase fields."""
 
     session_id: str = Field(
         ...,
-        description="Game session identifier"
+        description="Game session identifier",
+        alias="sessionId"
     )
     action_type: ActionCategory = Field(
         ...,
-        description="Category of action"
+        description="Category of action",
+        alias="actionType"
     )
     action_id: str = Field(
         ...,
         description="Specific action identifier",
-        examples=["repair_reactor", "talk_to_engineer", "investigate_breach"]
+        examples=["repair_reactor", "talk_to_engineer", "investigate_breach"],
+        alias="actionId"
     )
     action_text: str = Field(
         ...,
         min_length=1,
         max_length=500,
-        description="Player's action description in natural language"
+        description="Player's action description in natural language",
+        alias="actionText"
     )
     target_location: Optional[str] = Field(
         default=None,
-        description="Target location ID if action involves movement or location"
+        description="Target location ID if action involves movement or location",
+        alias="targetLocation"
     )
     target_npc: Optional[str] = Field(
         default=None,
-        description="Target NPC ID if action involves NPC interaction"
+        description="Target NPC ID if action involves NPC interaction",
+        alias="targetNpc"
     )
     target_item: Optional[str] = Field(
         default=None,
-        description="Target item ID if action involves item"
+        description="Target item ID if action involves item",
+        alias="targetItem"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,  # Accept both alias (camelCase) and field name (snake_case)
+        json_schema_extra={
             "example": {
-                "session_id": "sess_abc123",
-                "action_type": "social_interaction",
-                "action_id": "talk_to_captain",
-                "action_text": "I approach Captain Chen and ask about the ship's status.",
-                "target_location": None,
-                "target_npc": "npc_captain",
-                "target_item": None
+                "sessionId": "sess_abc123",
+                "actionType": "social_interaction",
+                "actionId": "talk_to_captain",
+                "actionText": "I approach Captain Chen and ask about the ship's status.",
+                "targetLocation": None,
+                "targetNpc": "npc_captain",
+                "targetItem": None
             }
         }
+    )
 
 
 class ActionRequirement(BaseModel):
@@ -100,14 +115,21 @@ class ActionRequirement(BaseModel):
 
 class ActionDefinition(BaseModel):
     """Definition of a possible action."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
     id: str = Field(
         ...,
-        description="Unique action identifier"
+        description="Unique action identifier",
+        alias="actionId",
+        serialization_alias="actionId"
     )
     name: str = Field(
         ...,
-        description="Display name of action"
+        description="Display name of action",
+        alias="displayName",
+        serialization_alias="displayName"
     )
     category: ActionCategory = Field(
         ...,
@@ -124,7 +146,9 @@ class ActionDefinition(BaseModel):
     possible_outcomes: List[str] = Field(
         default_factory=list,
         description="Possible outcome descriptions",
-        examples=[["successfully repair system", "partial repair", "failure causes damage"]]
+        examples=[["successfully repair system", "partial repair", "failure causes damage"]],
+        alias="possibleOutcomes",
+        serialization_alias="possibleOutcomes"
     )
     cooldown: int = Field(
         default=0,
@@ -133,28 +157,8 @@ class ActionDefinition(BaseModel):
     )
     one_time: bool = Field(
         default=False,
-        description="Whether action can only be performed once per game"
+        description="Whether action can only be performed once per game",
+        alias="oneTime",
+        serialization_alias="oneTime"
     )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "repair_life_support",
-                "name": "Repair Life Support System",
-                "category": "resource_management",
-                "description": "Attempt to repair the damaged life support system using available materials.",
-                "requirements": {
-                    "location": "engineering",
-                    "items": ["repair_kit"],
-                    "min_resource_levels": {"power_level": 15.0},
-                    "time_cost": 2
-                },
-                "possible_outcomes": [
-                    "Full repair restores life support efficiency",
-                    "Partial repair improves efficiency",
-                    "Repair fails and consumes materials"
-                ],
-                "cooldown": 5,
-                "one_time": False
-            }
-        }
+    # Note: Example moved to model_config above, old class Config removed to avoid conflict

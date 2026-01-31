@@ -1,10 +1,24 @@
 """API request and response schemas."""
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.models.game_state import GameState
 from app.models.action import ActionDefinition
 from app.models.response import GameActionResponse
+
+
+def to_camel(string: str) -> str:
+    """Convert snake_case to camelCase."""
+    components = string.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
+
+class CamelCaseModel(BaseModel):
+    """Base model that converts snake_case to camelCase in JSON output."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
 
 
 class GameStartRequest(BaseModel):
@@ -37,7 +51,7 @@ class GameStartRequest(BaseModel):
         }
 
 
-class GameStartResponse(BaseModel):
+class GameStartResponse(CamelCaseModel):
     """Response when starting a new game."""
 
     session_id: str = Field(
@@ -46,11 +60,13 @@ class GameStartResponse(BaseModel):
     )
     opening_narration: str = Field(
         ...,
-        description="AI-generated opening narration"
+        description="AI-generated opening narration",
+        alias="initialNarration"  # Frontend expects this name
     )
     initial_state: GameState = Field(
         ...,
-        description="Initial game state"
+        description="Initial game state",
+        alias="gameState"  # Frontend expects this name
     )
     available_actions: List[str] = Field(
         default_factory=list,
@@ -62,16 +78,19 @@ class GameStartResponse(BaseModel):
         description="Initial ORACLE message"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        json_schema_extra={
             "example": {
-                "session_id": "sess_abc123def456",
-                "opening_narration": "You wake from cryosleep to flashing red lights and blaring alarms...",
-                "initial_state": {},
-                "available_actions": ["explore_bridge", "talk_to_oracle"],
-                "oracle_message": "ALERT: MULTIPLE SYSTEM FAILURES DETECTED. CREW ASSISTANCE REQUIRED."
+                "sessionId": "sess_abc123def456",
+                "initialNarration": "You wake from cryosleep to flashing red lights and blaring alarms...",
+                "gameState": {},
+                "availableActions": ["explore_bridge", "talk_to_oracle"],
+                "oracleMessage": "ALERT: MULTIPLE SYSTEM FAILURES DETECTED. CREW ASSISTANCE REQUIRED."
             }
         }
+    )
 
 
 class AvailableActionsResponse(BaseModel):
@@ -111,12 +130,13 @@ class AvailableActionsResponse(BaseModel):
         }
 
 
-class TurnEndResponse(BaseModel):
+class TurnEndResponse(CamelCaseModel):
     """Response when ending a turn."""
 
     events_occurred: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="Events that occurred during turn processing"
+        description="Events that occurred during turn processing",
+        alias="events"  # Frontend expects shorter name
     )
     npc_actions_taken: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -128,7 +148,8 @@ class TurnEndResponse(BaseModel):
     )
     narration: str = Field(
         default="",
-        description="Narration of what happened during the turn"
+        description="Narration of what happened during the turn",
+        alias="turnSummary"  # Frontend expects this name
     )
     critical_alerts: List[str] = Field(
         default_factory=list,
@@ -140,8 +161,10 @@ class TurnEndResponse(BaseModel):
         description="New turn number after advancement"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,
+        alias_generator=to_camel,
+        json_schema_extra={
             "example": {
                 "events_occurred": [
                     {"event_id": "event_power_surge", "description": "Power surge detected"}
@@ -158,6 +181,7 @@ class TurnEndResponse(BaseModel):
                 "turn_number": 16
             }
         }
+    )
 
 
 class SaveGameRequest(BaseModel):
@@ -189,7 +213,7 @@ class SaveGameRequest(BaseModel):
         }
 
 
-class SaveGameResponse(BaseModel):
+class SaveGameResponse(CamelCaseModel):
     """Response when saving a game."""
 
     save_id: str = Field(
@@ -209,18 +233,8 @@ class SaveGameResponse(BaseModel):
         description="Turn number when saved"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "save_id": "save_xyz789",
-                "save_name": "Day 3 - Before reactor repair",
-                "saved_at": "2024-01-15T14:30:00Z",
-                "turn_count": 35
-            }
-        }
 
-
-class SaveMetadata(BaseModel):
+class SaveMetadata(CamelCaseModel):
     """Metadata about a saved game."""
 
     save_id: str = Field(..., description="Save identifier")
@@ -234,7 +248,7 @@ class SaveMetadata(BaseModel):
     ending_triggered: Optional[str] = Field(None, description="Ending ID if game ended")
 
 
-class ListSavesResponse(BaseModel):
+class ListSavesResponse(CamelCaseModel):
     """Response listing saved games."""
 
     saves: List[SaveMetadata] = Field(
@@ -247,7 +261,7 @@ class ListSavesResponse(BaseModel):
     )
 
 
-class LoadGameResponse(BaseModel):
+class LoadGameResponse(CamelCaseModel):
     """Response when loading a game."""
 
     session_id: str = Field(

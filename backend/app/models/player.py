@@ -1,10 +1,11 @@
 """Player state model."""
 
 from typing import List, Dict
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.models.base import CamelCaseModel
 
 
-class PlayerState(BaseModel):
+class PlayerState(CamelCaseModel):
     """Complete player state."""
 
     name: str = Field(

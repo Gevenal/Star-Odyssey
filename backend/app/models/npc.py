@@ -1,11 +1,12 @@
 """NPC models."""
 
 from typing import List, Dict, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.models.base import CamelCaseModel
 from app.models.enums import NPCDisposition
 
 
-class PersonalityTraits(BaseModel):
+class PersonalityTraits(CamelCaseModel):
     """NPC personality characteristics."""
 
     core_value: str = Field(
@@ -57,7 +58,7 @@ class PersonalityTraits(BaseModel):
         }
 
 
-class NPCRelationship(BaseModel):
+class NPCRelationship(CamelCaseModel):
     """Relationship between NPCs or NPC and player."""
 
     target_npc_id: str = Field(
@@ -100,7 +101,7 @@ class NPCRelationship(BaseModel):
             return NPCDisposition.HOSTILE
 
 
-class NPCSecret(BaseModel):
+class NPCSecret(CamelCaseModel):
     """Secret information about or known by an NPC."""
 
     id: str = Field(
@@ -133,7 +134,7 @@ class NPCSecret(BaseModel):
         }
 
 
-class NPCState(BaseModel):
+class NPCState(CamelCaseModel):
     """Complete state of an NPC."""
 
     id: str = Field(

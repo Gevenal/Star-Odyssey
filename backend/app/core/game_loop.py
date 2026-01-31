@@ -18,6 +18,8 @@ from app.ai.schemas.game_response import (
     Mood as AIMood,
     ConfidenceLevel as AIConfidenceLevel,
 )
+from app.ai.validators.output_validator import AIOutputValidator, GameContext
+from app.core.rules.resource_rules import ResourceDecayRule, CriticalResourceRule
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -111,7 +113,7 @@ def _ai_to_model(ai: AIGameActionResponse) -> GameActionResponse:
 class GameLoop:
     """Orchestrates the turn-based game loop."""
 
-    def __init__(self, state_manager, rules_engine, gemini_client):
+    def __init__(self, state_manager, rules_engine, gemini_client, game_data_loader=None):
         """
         Initialize game loop with dependencies.
 
@@ -119,10 +121,20 @@ class GameLoop:
             state_manager: SessionStateManager
             rules_engine: RulesEngine
             gemini_client: GeminiClient
+            game_data_loader: Optional GameDataLoader for resource rules
         """
         self.state_manager = state_manager
         self.rules_engine = rules_engine
         self.gemini_client = gemini_client
+        self.game_data_loader = game_data_loader
+
+        # Initialize AI output validator
+        self.ai_validator = AIOutputValidator()
+
+        # Initialize resource rules
+        self.decay_rule = ResourceDecayRule(game_data_loader)
+        self.critical_rule = CriticalResourceRule(game_data_loader)
+
         # Initialize NPC scheduler
         from app.ai.agents.npc_scheduler import NPCScheduler
         self.npc_scheduler = NPCScheduler(gemini_client=gemini_client)
@@ -189,6 +201,9 @@ class GameLoop:
                 trigger_ending=False,
                 ending_id=None,
             )
+
+        # 3.5. Validate and auto-correct AI output to prevent AI from exceeding its authority
+        ai_resp = self._validate_and_correct_ai_output(ai_resp, game_state_pydantic)
 
         # 4. Apply resource_changes
         for c in (ai_resp.resource_changes or []):
@@ -327,6 +342,121 @@ class GameLoop:
             return True, "ending_rescue"
         return False, None
 
+    def _validate_and_correct_ai_output(
+        self,
+        ai_resp: AIGameActionResponse,
+        game_state,
+    ) -> AIGameActionResponse:
+        """
+        Validate AI output and auto-correct if necessary.
+
+        This is the key defense against AI "exceeding its authority":
+        - Prevents AI from referencing non-existent NPCs/locations/items
+        - Prevents unauthorized NPC deaths
+        - Prevents modification of readonly fields
+        - Prevents early ending triggers
+        - Clamps resource changes to reasonable ranges
+
+        Args:
+            ai_resp: AI-generated response
+            game_state: Current game state (Pydantic model)
+
+        Returns:
+            Validated and potentially corrected AI response
+        """
+        # Build validation context from current game state
+        context = GameContext(
+            valid_npcs=set(game_state.npcs.keys()),
+            valid_locations=set(getattr(game_state.world, 'locations', {}).keys()) or {
+                "cryo_bay", "command_bridge", "engineering", "reactor_room",
+                "med_bay", "crew_quarters", "mess_hall", "cargo_bay", "observation_deck"
+            },
+            valid_items=set(game_state.player.inventory or []),
+            discovered_secrets=set(game_state.player.discovered_secrets or []),
+            player_inventory=set(game_state.player.inventory or []),
+            player_location=game_state.player.location,
+            current_day=getattr(game_state.world, 'day', 1) or 1,
+            npc_alive_status={
+                npc_id: npc.alive
+                for npc_id, npc in game_state.npcs.items()
+            },
+            allow_death=self._should_allow_death(game_state),
+            resource_levels=self._get_resource_levels(game_state),
+        )
+
+        # Validate AI output
+        validation_result = self.ai_validator.validate(ai_resp, context)
+
+        # Log validation errors if any
+        if not validation_result.valid:
+            for error in validation_result.errors:
+                logger.warning(
+                    f"[AI Validation Error] {error.code}: {error.message} "
+                    f"(field: {error.field}, value: {error.value})"
+                )
+
+        # Log warnings
+        for warning in validation_result.warnings:
+            logger.info(
+                f"[AI Validation Warning] {warning.code}: {warning.message}"
+            )
+
+        # Auto-correct the response if there are errors or warnings
+        if validation_result.errors or validation_result.warnings:
+            ai_resp = self.ai_validator.auto_correct(ai_resp, context, validation_result)
+            logger.info("[AI Output] Auto-corrected AI response to ensure game integrity")
+
+        return ai_resp
+
+    def _should_allow_death(self, game_state) -> bool:
+        """
+        Check if NPC death should be allowed in current game state.
+
+        Deaths are allowed when:
+        - Resources are critical (crew may die from environmental causes)
+        - It's late in the game (day 5+)
+        - Special story events are active
+        """
+        # Check if resources are critically low
+        resources = game_state.world.resources
+        oxygen = getattr(resources, 'oxygen_level', None)
+        if oxygen:
+            current = oxygen.current if hasattr(oxygen, 'current') else oxygen
+            if isinstance(current, (int, float)) and current <= 10:
+                return True
+
+        # Allow death in late game
+        current_day = getattr(game_state.world, 'day', 1) or 1
+        if current_day >= 5:
+            return True
+
+        # Check for story events that enable death
+        player_flags = game_state.player.flags or {}
+        if player_flags.get("crisis_active") or player_flags.get("mutiny_in_progress"):
+            return True
+
+        return False
+
+    def _get_resource_levels(self, game_state) -> dict:
+        """Extract current resource levels from game state."""
+        resources = game_state.world.resources
+        levels = {}
+
+        resource_names = [
+            "oxygen_level", "fuel_reserves", "power_level",
+            "food_water", "medical_supplies", "repair_materials"
+        ]
+
+        for name in resource_names:
+            resource = getattr(resources, name, None)
+            if resource is not None:
+                if hasattr(resource, 'current'):
+                    levels[name] = resource.current
+                elif isinstance(resource, (int, float)):
+                    levels[name] = resource
+
+        return levels
+
     async def process_action_stream(
         self, session_id: str, action: PlayerAction
     ) -> AsyncGenerator[str, None]:
@@ -361,19 +491,22 @@ class GameLoop:
         if gs.get("game_meta.game_phase") == "ending":
             raise ValueError("Game has ended")
 
-        # Simple decay: subtract fixed amounts from resources if they exist
-        for name, key in [
-            ("oxygen_level", 1.2),
-            ("fuel_reserves", 0.8),
-            ("power_level", 1.0),
-            ("food_water", 0.9),
-        ]:
-            path = f"resources.{name}"
+        # Apply resource decay using the decay rule (reads from state_variables.json)
+        game_state_pydantic = StateConverter.snapshot_to_game_state(gs.get_snapshot(), session_id)
+        _, decay_changes = self.decay_rule.apply_decay(game_state_pydantic)
+
+        # Apply decay changes to GameStateManager
+        for resource_name, change_info in decay_changes.items():
+            path = f"resources.{resource_name}"
             cur = gs.get(path)
             if isinstance(cur, (int, float)):
-                gs.modify(path, -min(key, cur), validate=False)
+                gs.set(path, change_info["new"], validate=False)
             elif isinstance(cur, dict) and "current" in cur:
-                gs.set(f"{path}.current", max(0, (cur.get("current") or 0) - key), validate=False)
+                gs.set(f"{path}.current", change_info["new"], validate=False)
+
+        # Check for critical resources
+        critical_result = self.critical_rule.validate(game_state_pydantic)
+        critical_alerts = critical_result.metadata.get("warnings", []) if critical_result.metadata else []
 
         # Execute NPC actions
         npc_actions_taken = []
@@ -595,6 +728,7 @@ class GameLoop:
             "npc_actions_taken": npc_actions_taken,
             "state_summary": {
                 "resources_decayed": True,
+                "decay_changes": decay_changes,
                 "turn_advanced": True,
                 "npc_actions": len(npc_actions_taken),
                 "deaths": len(death_events),
@@ -602,6 +736,6 @@ class GameLoop:
                 "sacrifices": len(sacrifice_events)
             },
             "narration": " ".join(narration_parts),
-            "critical_alerts": [],
+            "critical_alerts": critical_alerts,
             "turn_number": gs.get("game_meta.current_turn"),
         }

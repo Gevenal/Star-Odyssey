@@ -1,12 +1,13 @@
 """World state model."""
 
 from typing import Dict, List
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.models.base import CamelCaseModel
 from app.models.resources import ResourceLevels, ShipSystems
 from app.models.location import LocationState
 
 
-class WorldState(BaseModel):
+class WorldState(CamelCaseModel):
     """Complete world/ship state."""
 
     day: int = Field(

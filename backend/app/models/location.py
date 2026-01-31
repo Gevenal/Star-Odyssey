@@ -1,11 +1,12 @@
 """Location models."""
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.models.base import CamelCaseModel
 from app.models.enums import Atmosphere
 
 
-class LocationState(BaseModel):
+class LocationState(CamelCaseModel):
     """Current state of a location."""
 
     is_sealed: bool = Field(
@@ -27,7 +28,7 @@ class LocationState(BaseModel):
     )
 
 
-class Location(BaseModel):
+class Location(CamelCaseModel):
     """Ship location definition."""
 
     id: str = Field(

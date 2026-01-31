@@ -2,8 +2,8 @@
 import pytest
 from app.core.rules.engine import RulesEngine
 from app.core.rules.base_rule import BaseRule, RuleResult
-from app.core.rules.resource_rules import ResourceAvailabilityRule
-from app.core.rules.location_rules import LocationTopologyRule
+from app.core.rules.resource_rules import ResourceAvailabilityRule, ResourceDecayRule, CriticalResourceRule
+from app.core.rules.location_rules import LocationTopologyRule, AtmosphereAccessRule, LocationSealRule
 from app.models.action import PlayerAction
 
 
@@ -188,33 +188,373 @@ class TestLocationRules:
         assert result.valid is True
         loader.load_world_config.assert_not_called()
 
-    def test_atmosphere_safe(self, sample_game_state):
+    def test_atmosphere_safe(self, sample_game_state, sample_player_action):
         """Test access to location with safe atmosphere."""
-        # TODO: Implement
-        pass
+        from unittest.mock import MagicMock
+        from app.core.rules.location_rules import AtmosphereAccessRule
 
-    def test_atmosphere_requires_equipment(self, sample_game_state):
+        loader = MagicMock()
+        loc = MagicMock()
+        loc.default_atmosphere = "normal"
+        loader.load_world_config.return_value = MagicMock(
+            locations={"med_bay": loc}
+        )
+
+        gs = sample_game_state.model_copy(deep=True)
+        act = sample_player_action.model_copy(deep=True)
+        act.target_location = "med_bay"
+
+        rule = AtmosphereAccessRule(loader)
+        result = rule.validate(act, gs)
+        assert result.valid is True
+
+    def test_atmosphere_requires_equipment(self, sample_game_state, sample_player_action):
         """Test vacuum/toxic atmosphere requires protective equipment."""
-        # TODO: Implement
-        pass
+        from unittest.mock import MagicMock
+        from app.core.rules.location_rules import AtmosphereAccessRule
+
+        loader = MagicMock()
+        loc = MagicMock()
+        loc.default_atmosphere = "vacuum"
+        loader.load_world_config.return_value = MagicMock(
+            locations={"airlock": loc}
+        )
+
+        gs = sample_game_state.model_copy(deep=True)
+        gs.player.inventory = []  # No space suit
+        act = sample_player_action.model_copy(deep=True)
+        act.target_location = "airlock"
+
+        rule = AtmosphereAccessRule(loader)
+        result = rule.validate(act, gs)
+        assert result.valid is False
+        assert "vacuum" in (result.error or "").lower() or "space suit" in (result.error or "").lower()
+
+    def test_atmosphere_with_equipment_passes(self, sample_game_state, sample_player_action):
+        """Test vacuum access succeeds with space suit."""
+        from unittest.mock import MagicMock
+        from app.core.rules.location_rules import AtmosphereAccessRule
+
+        loader = MagicMock()
+        loc = MagicMock()
+        loc.default_atmosphere = "vacuum"
+        loader.load_world_config.return_value = MagicMock(
+            locations={"airlock": loc}
+        )
+
+        gs = sample_game_state.model_copy(deep=True)
+        gs.player.inventory = ["space_suit"]
+        act = sample_player_action.model_copy(deep=True)
+        act.target_location = "airlock"
+
+        rule = AtmosphereAccessRule(loader)
+        result = rule.validate(act, gs)
+        assert result.valid is True
+
+    def test_seal_rule_open_location(self, sample_game_state, sample_player_action):
+        """Test access to open (unsealed) location."""
+        from unittest.mock import MagicMock
+        from app.core.rules.location_rules import LocationSealRule
+
+        loader = MagicMock()
+        gs = sample_game_state.model_copy(deep=True)
+        act = sample_player_action.model_copy(deep=True)
+        act.target_location = "med_bay"
+
+        rule = LocationSealRule(loader)
+        result = rule.validate(act, gs)
+        assert result.valid is True
+
+
+class TestResourceDecayRule:
+    """Test suite for resource decay rule."""
+
+    def test_decay_applies_correctly(self, sample_game_state):
+        """Test that decay is applied correctly to resources."""
+        from app.core.rules.resource_rules import ResourceDecayRule
+
+        rule = ResourceDecayRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 85.0
+
+        _, changes = rule.apply_decay(gs)
+
+        # Oxygen should have decayed by its rate (1.2)
+        assert "oxygen_level" in changes
+        assert changes["oxygen_level"]["old"] == 85.0
+        assert changes["oxygen_level"]["new"] == 85.0 - 1.2
+
+    def test_decay_respects_min_value(self, sample_game_state):
+        """Test that decay doesn't go below minimum."""
+        from app.core.rules.resource_rules import ResourceDecayRule
+
+        rule = ResourceDecayRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 0.5  # Very low
+
+        _, changes = rule.apply_decay(gs)
+
+        if "oxygen_level" in changes:
+            assert changes["oxygen_level"]["new"] >= 0.0
+
+
+class TestCriticalResourceRule:
+    """Test suite for critical resource rule."""
+
+    def test_detect_critical_resources(self, sample_game_state):
+        """Test detection of critical resource levels."""
+        from app.core.rules.resource_rules import CriticalResourceRule
+
+        rule = CriticalResourceRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 15.0  # Below critical threshold (25)
+
+        result = rule.validate(gs)
+
+        assert result.valid is True
+        assert result.metadata is not None
+        assert "oxygen_level" in result.metadata.get("critical_resources", [])
+        assert result.metadata.get("has_critical") is True
+
+    def test_detect_depleted_resources(self, sample_game_state):
+        """Test detection of depleted (zero) resources."""
+        from app.core.rules.resource_rules import CriticalResourceRule
+
+        rule = CriticalResourceRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 0.0
+
+        result = rule.validate(gs)
+
+        assert result.metadata is not None
+        assert "oxygen_level" in result.metadata.get("depleted_resources", [])
+
+    def test_game_over_oxygen_depletion(self, sample_game_state):
+        """Test game over condition when oxygen is depleted."""
+        from app.core.rules.resource_rules import CriticalResourceRule
+
+        rule = CriticalResourceRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 0.0
+
+        should_end, ending_id = rule.check_game_over_conditions(gs)
+
+        assert should_end is True
+        assert ending_id == "ending_oxygen_depletion"
+
+    def test_normal_resources_no_critical(self, sample_game_state):
+        """Test normal resource levels don't trigger critical."""
+        from app.core.rules.resource_rules import CriticalResourceRule
+
+        rule = CriticalResourceRule()
+        gs = sample_game_state.model_copy(deep=True)
+        gs.world.resources.oxygen_level.current = 80.0
+
+        result = rule.validate(gs)
+
+        assert result.metadata is not None
+        assert "oxygen_level" not in result.metadata.get("critical_resources", [])
 
 
 class TestAIOutputValidation:
-    """Test suite for AI output validation."""
+    """Test suite for AI output validation in GameLoop."""
 
-    def test_validate_ai_output_forbidden_behavior(self):
-        """Test AI output validation catches forbidden behaviors."""
-        # TODO: Create AI output suggesting forbidden action
-        # Verify it's rejected
-        pass
+    def test_validate_ai_output_removes_invalid_npc(self, sample_game_state):
+        """Test AI output validation removes reactions for invalid NPCs."""
+        from app.ai.validators.output_validator import AIOutputValidator, GameContext
+        from app.ai.schemas.game_response import (
+            GameActionResponse as AIGameActionResponse,
+            NPCReaction,
+            Mood,
+            ConfidenceLevel,
+        )
 
-    def test_validate_ai_output_valid_state_changes(self):
-        """Test valid state changes pass validation."""
-        # TODO: Implement
-        pass
+        validator = AIOutputValidator()
 
-    def test_validate_ai_output_invalid_state_changes(self):
-        """Test invalid state changes are rejected."""
-        # TODO: Create invalid state change (e.g., negative resource)
-        # Verify rejection
-        pass
+        ai_resp = AIGameActionResponse(
+            success=True,
+            narration="Test narration",
+            mood=Mood.TENSE,
+            confidence_level=ConfidenceLevel.HIGH,
+            state_changes=[],
+            resource_changes=[],
+            npc_reactions=[
+                NPCReaction(
+                    npc_id="invalid_npc",  # Non-existent NPC
+                    reaction_text="This NPC doesn't exist",
+                    disposition_change=5,
+                    new_activity=None
+                )
+            ],
+            available_actions=[],
+            trigger_ending=False,
+            ending_id=None,
+        )
+
+        context = GameContext(
+            valid_npcs={"test_npc_001"},  # Only valid NPC
+            valid_locations={"med_bay", "bridge"},
+            valid_items=set(),
+            discovered_secrets=set(),
+            player_inventory=set(),
+            player_location="bridge",
+            current_day=3,
+            npc_alive_status={"test_npc_001": True},
+            allow_death=False,
+        )
+
+        result = validator.validate(ai_resp, context)
+
+        # Should have errors about invalid NPC
+        assert not result.valid or len(result.errors) > 0
+        has_npc_error = any("invalid_npc" in (e.value or "") or "NPC" in (e.message or "") for e in result.errors)
+        assert has_npc_error
+
+    def test_auto_correct_removes_invalid_reactions(self, sample_game_state):
+        """Test auto-correct removes invalid NPC reactions."""
+        from app.ai.validators.output_validator import AIOutputValidator, GameContext, ValidationResult
+        from app.ai.schemas.game_response import (
+            GameActionResponse as AIGameActionResponse,
+            NPCReaction,
+            Mood,
+            ConfidenceLevel,
+        )
+
+        validator = AIOutputValidator()
+
+        ai_resp = AIGameActionResponse(
+            success=True,
+            narration="Test narration",
+            mood=Mood.TENSE,
+            confidence_level=ConfidenceLevel.HIGH,
+            state_changes=[],
+            resource_changes=[],
+            npc_reactions=[
+                NPCReaction(
+                    npc_id="invalid_npc",
+                    reaction_text="This NPC doesn't exist",
+                    disposition_change=5,
+                    new_activity=None
+                ),
+                NPCReaction(
+                    npc_id="test_npc_001",  # Valid NPC
+                    reaction_text="Valid NPC reaction",
+                    disposition_change=10,
+                    new_activity="Working"
+                )
+            ],
+            available_actions=[],
+            trigger_ending=False,
+            ending_id=None,
+        )
+
+        context = GameContext(
+            valid_npcs={"test_npc_001"},
+            valid_locations={"med_bay", "bridge"},
+            valid_items=set(),
+            discovered_secrets=set(),
+            player_inventory=set(),
+            player_location="bridge",
+            current_day=3,
+            npc_alive_status={"test_npc_001": True},
+            allow_death=False,
+        )
+
+        result = validator.validate(ai_resp, context)
+        corrected = validator.auto_correct(ai_resp, context, result)
+
+        # Should have removed invalid NPC but kept valid one
+        assert len(corrected.npc_reactions) == 1
+        assert corrected.npc_reactions[0].npc_id == "test_npc_001"
+
+    def test_validate_blocks_early_ending(self):
+        """Test validation warns about early ending trigger."""
+        from app.ai.validators.output_validator import AIOutputValidator, GameContext
+        from app.ai.schemas.game_response import (
+            GameActionResponse as AIGameActionResponse,
+            Mood,
+            ConfidenceLevel,
+        )
+
+        validator = AIOutputValidator()
+
+        ai_resp = AIGameActionResponse(
+            success=True,
+            narration="Test narration",
+            mood=Mood.TENSE,
+            confidence_level=ConfidenceLevel.HIGH,
+            state_changes=[],
+            resource_changes=[],
+            npc_reactions=[],
+            available_actions=[],
+            trigger_ending=True,  # Trying to end game early
+            ending_id="early_ending",
+        )
+
+        context = GameContext(
+            valid_npcs=set(),
+            valid_locations=set(),
+            valid_items=set(),
+            discovered_secrets=set(),
+            player_inventory=set(),
+            player_location="bridge",
+            current_day=2,  # Early day - ending shouldn't trigger
+            npc_alive_status={},
+            allow_death=False,
+        )
+
+        result = validator.validate(ai_resp, context)
+
+        # Should have warning about early ending
+        has_early_warning = any("early" in (w.message or "").lower() for w in result.warnings)
+        assert has_early_warning
+
+    def test_validate_clamps_large_resource_changes(self):
+        """Test validation warns about large resource changes."""
+        from app.ai.validators.output_validator import AIOutputValidator, GameContext
+        from app.ai.schemas.game_response import (
+            GameActionResponse as AIGameActionResponse,
+            ResourceChange,
+            Mood,
+            ConfidenceLevel,
+        )
+
+        validator = AIOutputValidator()
+
+        ai_resp = AIGameActionResponse(
+            success=True,
+            narration="Test narration",
+            mood=Mood.TENSE,
+            confidence_level=ConfidenceLevel.HIGH,
+            state_changes=[],
+            resource_changes=[
+                ResourceChange(
+                    resource_name="oxygen_level",
+                    change_amount=50,  # Too large
+                    reason="Magic oxygen"
+                )
+            ],
+            npc_reactions=[],
+            available_actions=[],
+            trigger_ending=False,
+            ending_id=None,
+        )
+
+        context = GameContext(
+            valid_npcs=set(),
+            valid_locations=set(),
+            valid_items=set(),
+            discovered_secrets=set(),
+            player_inventory=set(),
+            player_location="bridge",
+            current_day=3,
+            npc_alive_status={},
+            allow_death=False,
+            resource_levels={"oxygen_level": 50.0},
+        )
+
+        result = validator.validate(ai_resp, context)
+
+        # Should have warning about large change
+        has_large_warning = any("large" in (w.message or "").lower() for w in result.warnings)
+        assert has_large_warning

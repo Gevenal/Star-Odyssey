@@ -16,12 +16,17 @@ export interface GameStartResponse {
 
 export interface ActionDefinition {
   actionId: string;
-  actionType: string;
   displayName: string;
   description: string;
   category: string;
-  requiresTarget: boolean;
-  targetType?: 'location' | 'npc' | 'item';
+  requirements?: {
+    location?: string;
+    items?: string[];
+    timeCost?: number;
+  };
+  possibleOutcomes?: string[];
+  cooldown?: number;
+  oneTime?: boolean;
 }
 
 export interface TurnEndResponse {

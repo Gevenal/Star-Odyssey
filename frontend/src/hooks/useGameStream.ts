@@ -31,14 +31,25 @@ export const useGameStream = (options?: UseGameStreamOptions) => {
       eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.type === 'narration_chunk') {
-          appendStreamContent(data.content);
+        if (data.type === 'narration') {
+          // 后端发送 {"type": "narration", "chunk": "..."}
+          appendStreamContent(data.chunk);
         } else if (data.type === 'complete') {
-          // Stream complete
+          // 后端发送 {"type": "complete", "response": {...}}
           setStreaming(false);
-          addNarration('narrator', data.fullNarration);
+          const response = data.response;
+          if (response && response.narration) {
+            addNarration('narrator', response.narration);
+          }
+          if (response && response.oracleMessage) {
+            addNarration('oracle', response.oracleMessage);
+          }
           eventSource.close();
           options?.onComplete?.();
+        } else if (data.type === 'error') {
+          setStreaming(false);
+          eventSource.close();
+          options?.onError?.(new Error(data.message || 'Unknown error'));
         }
       };
 

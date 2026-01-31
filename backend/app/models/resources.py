@@ -1,9 +1,10 @@
 """Resource and ship system models."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.models.base import CamelCaseModel
 
 
-class ResourceLevel(BaseModel):
+class ResourceLevel(CamelCaseModel):
     """Individual resource level tracking."""
 
     current: float = Field(
@@ -53,7 +54,7 @@ class ResourceLevel(BaseModel):
         return (self.current / self.max) * 100.0
 
 
-class ResourceLevels(BaseModel):
+class ResourceLevels(CamelCaseModel):
     """All ship resource levels."""
 
     oxygen_level: ResourceLevel = Field(
@@ -112,7 +113,7 @@ class ResourceLevels(BaseModel):
     )
 
 
-class SystemIntegrity(BaseModel):
+class SystemIntegrity(CamelCaseModel):
     """Individual ship system integrity."""
 
     integrity: float = Field(
@@ -140,7 +141,7 @@ class SystemIntegrity(BaseModel):
         return self.integrity <= 10.0 or not self.operational
 
 
-class ShipSystems(BaseModel):
+class ShipSystems(CamelCaseModel):
     """All ship system integrity levels."""
 
     reactor_integrity: SystemIntegrity = Field(
