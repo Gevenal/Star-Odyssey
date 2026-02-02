@@ -3,6 +3,7 @@ import {
   GameStartRequest,
   GameStartResponse,
   ActionDefinition,
+  AvailableActionsResponse,
   TurnEndResponse,
   SaveGameResponse,
   LoadGameResponse,
@@ -69,9 +70,8 @@ export const gameApi = {
    * Get available actions for current state
    */
   getAvailableActions: async (sessionId: string): Promise<ActionDefinition[]> => {
-    // TODO: Implement API call
-    const response = await apiClient.get<ActionDefinition[]>(`/game/actions/${sessionId}`);
-    return response.data;
+    const response = await apiClient.get<AvailableActionsResponse>(`/game/actions/${sessionId}`);
+    return response.data.actions || [];
   },
 
   /**

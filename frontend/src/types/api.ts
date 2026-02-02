@@ -12,6 +12,8 @@ export interface GameStartResponse {
   sessionId: string;
   gameState: GameState;
   initialNarration: string;
+  availableActions?: string[];
+  oracleMessage?: string;
 }
 
 export interface ActionDefinition {
@@ -27,6 +29,12 @@ export interface ActionDefinition {
   possibleOutcomes?: string[];
   cooldown?: number;
   oneTime?: boolean;
+}
+
+export interface AvailableActionsResponse {
+  actions: ActionDefinition[];
+  contextHints: string[];
+  urgentActions: string[];
 }
 
 export interface TurnEndResponse {
