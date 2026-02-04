@@ -1,23 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { GameLayout } from '@/components/layout/GameLayout';
-import { NarrationPanel } from '@/components/game/NarrationPanel';
-import { ActionInput } from '@/components/game/ActionInput';
-import { ResourceMonitor } from '@/components/game/ResourceMonitor';
-import { NPCPanel } from '@/components/game/NPCPanel';
-import { useGameStore } from '@/stores/gameStore';
-import { useGameActions } from '@/hooks/useGameActions';
-import { gameApi } from '@/api/gameApi';
-import { ActionDefinition } from '@/types/api';
+import React, { useEffect, useState } from "react";
+import { GameLayout } from "@/components/layout/GameLayout";
+import { NarrationPanel } from "@/components/game/NarrationPanel";
+import { ActionInput } from "@/components/game/ActionInput";
+import { ResourceMonitor } from "@/components/game/ResourceMonitor";
+import { NPCPanel } from "@/components/game/NPCPanel";
+import { useGameStore } from "@/stores/gameStore";
+import { useGameActions } from "@/hooks/useGameActions";
+import { gameApi } from "@/api/gameApi";
+import { ActionDefinition } from "@/types/api";
+import { useNavigate } from "react-router-dom";
 
 interface GamePageProps {
   onExit?: () => void;
 }
 
 export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
-  const { gameState, isLoading, sessionId, addNarration, setGameState } = useGameStore();
+  const { gameState, isLoading, sessionId, addNarration, setGameState } =
+    useGameStore();
   const { submitActionStreaming } = useGameActions();
-  const [availableActions, setAvailableActions] = useState<ActionDefinition[]>([]);
+  const [availableActions, setAvailableActions] = useState<ActionDefinition[]>(
+    [],
+  );
   const [loadingActions, setLoadingActions] = useState(false);
+  const navigate = useNavigate();
 
   // 获取当前可用的 actions（基于 RulesEngine 过滤）
   const fetchAvailableActions = async () => {
@@ -27,7 +32,7 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
       const actions = await gameApi.getAvailableActions(sessionId);
       setAvailableActions(actions);
     } catch (err) {
-      console.error('Failed to fetch actions:', err);
+      console.error("Failed to fetch actions:", err);
     } finally {
       setLoadingActions(false);
     }
@@ -48,35 +53,59 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
   };
 
   // 结束回合
+  const isGameOverFromState = (state: any) => {
+    return (
+      state?.world?.game_meta?.game_phase === "ending" ||
+      state?.gameOver === true
+    );
+  };
+
   const handleEndTurn = async () => {
     if (!sessionId) return;
+
     try {
       const response = await gameApi.endTurn(sessionId);
-      addNarration('narrator', response.turnSummary || 'Time passes...');
-      if (response.events && response.events.length > 0) {
-        response.events.forEach((event: string) => addNarration('event', event));
+
+      addNarration("narrator", response.turnSummary || "Time passes...");
+      if (response.events?.length) {
+        response.events.forEach((event: string) =>
+          addNarration("event", event),
+        );
       }
-      // 刷新游戏状态
+
       const newState = await gameApi.getGameState(sessionId);
       setGameState(newState);
-      // 刷新可用 actions
+
+      if (isGameOverFromState(newState)) {
+        navigate(`/ending/${sessionId}`);
+        return;
+      }
+
+      // 如果希望确保 actions 立刻更新（不依赖 turn 是否变化），保留这句
       fetchAvailableActions();
     } catch (err) {
-      console.error('Failed to end turn:', err);
+      console.error("Failed to end turn:", err);
     }
   };
 
   if (!gameState) {
-    return <div className="min-h-screen bg-space-900 flex items-center justify-center text-white">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-space-900 flex items-center justify-center text-white">
+        Loading...
+      </div>
+    );
   }
 
   // 按类别分组 actions
-  const actionsByCategory = availableActions.reduce((acc, action) => {
-    const cat = action.category || 'Other';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(action);
-    return acc;
-  }, {} as Record<string, ActionDefinition[]>);
+  const actionsByCategory = availableActions.reduce(
+    (acc, action) => {
+      const cat = action.category || "Other";
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(action);
+      return acc;
+    },
+    {} as Record<string, ActionDefinition[]>,
+  );
 
   return (
     <GameLayout
@@ -105,16 +134,22 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
               ⏭️ End Turn
             </button>
           </div>
-          
+
           {loadingActions ? (
-            <div className="text-gray-400 text-center py-4">Loading actions...</div>
+            <div className="text-gray-400 text-center py-4">
+              Loading actions...
+            </div>
           ) : availableActions.length === 0 ? (
-            <div className="text-gray-400 text-center py-4">No actions available</div>
+            <div className="text-gray-400 text-center py-4">
+              No actions available
+            </div>
           ) : (
             <div className="space-y-3">
               {Object.entries(actionsByCategory).map(([category, actions]) => (
                 <div key={category}>
-                  <h4 className="text-gray-400 text-xs uppercase mb-2">{category}</h4>
+                  <h4 className="text-gray-400 text-xs uppercase mb-2">
+                    {category}
+                  </h4>
                   <div className="grid grid-cols-2 gap-2">
                     {actions.map((action) => (
                       <button
