@@ -12,6 +12,8 @@ import { useGameStore } from "@/stores/gameStore";
 import { gameApi } from "@/api/gameApi";
 import { EndingPage } from "./pages/EndingPage";
 
+const LAST_SESSION_KEY = "star_odyssey:last_session_id";
+
 function HomeRoute() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +42,8 @@ function HomeRoute() {
         addNarration("oracle", response.oracleMessage);
       }
 
+      localStorage.setItem(LAST_SESSION_KEY, response.sessionId);
+
       // 真正的“页面跳转”：URL 会变成 /game/<sessionId>
       navigate(`/game/${response.sessionId}`);
     } catch (err) {
@@ -51,7 +55,14 @@ function HomeRoute() {
   };
 
   const handleLoadGame = () => {
-    alert("Load game feature coming soon!");
+    const lastSessionId = localStorage.getItem(LAST_SESSION_KEY);
+
+    if (!lastSessionId) {
+      setError("No saved session found. Start a new game first.");
+      return;
+    }
+
+    navigate(`/game/${lastSessionId}`);
   };
 
   // 保留原有的 loading/error UI（现在只在 HomeRoute 里）
