@@ -1,6 +1,5 @@
-import apiClient from './client';
+import apiClient, { apiRequest } from './client';
 import {
-  GameStartRequest,
   GameStartResponse,
   ActionDefinition,
   AvailableActionsResponse,
@@ -10,93 +9,179 @@ import {
 } from '@/types/api';
 import { GameState, GameActionResponse, PlayerAction } from '@/types/game';
 
+const BASE_URL = apiClient.defaults.baseURL ?? 'http://localhost:8000/api/v1';
+
+/** Request body for backend (snake_case) */
+function toActionBody(action: PlayerAction): Record<string, unknown> {
+  return {
+    session_id: action.sessionId,
+    action_type: action.actionType,
+    action_id: action.actionId,
+    action_text: action.actionText,
+    ...(action.targetLocation != null && { target_location: action.targetLocation }),
+    ...(action.targetNpc != null && { target_npc: action.targetNpc }),
+    ...(action.targetItem != null && { target_item: action.targetItem }),
+  };
+}
+
 export const gameApi = {
   /**
-   * Start a new game session
+   * Start a new game session.
+   * Uses retry for transient failures.
    */
-  startGame: async (playerName: string): Promise<GameStartResponse> => {
-    const response = await apiClient.post<GameStartResponse>('/game/start', {
-      player_name: playerName,
-    });
-    return response.data;
+  startGame: (playerName: string): Promise<GameStartResponse> =>
+    apiRequest<GameStartResponse>({
+      method: 'POST',
+      url: '/game/start',
+      data: { player_name: playerName },
+    }),
+
+  /**
+   * Submit a player action (non-streaming).
+   */
+  submitAction: (action: PlayerAction): Promise<GameActionResponse> =>
+    apiRequest<GameActionResponse>({
+      method: 'POST',
+      url: '/game/action',
+      data: toActionBody(action),
+    }),
+
+  /**
+   * Submit a player action with SSE streaming (POST + stream).
+   * Backend expects POST /game/action/stream with JSON body; EventSource is GET-only, so we use fetch.
+   * Returns a controller with close() to abort the stream.
+   */
+  submitActionStream: (
+    action: PlayerAction,
+    callbacks: {
+      onChunk?: (chunk: string) => void;
+      onComplete?: (response: GameActionResponse) => void;
+      onError?: (error: Error) => void;
+    }
+  ): { close: () => void } => {
+    const ac = new AbortController();
+    const body = JSON.stringify(toActionBody(action));
+
+    (async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/game/action/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          signal: ac.signal,
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          let message = res.statusText;
+          try {
+            const j = JSON.parse(text) as { detail?: string; message?: string };
+            message = (j.detail ?? j.message ?? text) || message;
+          } catch {
+            message = text || message;
+          }
+          callbacks.onError?.(new Error(message));
+          return;
+        }
+
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        if (!reader) {
+          callbacks.onError?.(new Error('No response body'));
+          return;
+        }
+
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const raw = line.slice(6).trim();
+              if (!raw) continue;
+              try {
+                const data = JSON.parse(raw) as {
+                  type: string;
+                  chunk?: string;
+                  response?: GameActionResponse;
+                  code?: number;
+                  message?: string;
+                };
+                if (data.type === 'narration' && data.chunk) {
+                  callbacks.onChunk?.(data.chunk);
+                } else if (data.type === 'complete' && data.response) {
+                  callbacks.onComplete?.(data.response);
+                  return;
+                } else if (data.type === 'error') {
+                  callbacks.onError?.(new Error(data.message ?? 'Stream error'));
+                  return;
+                }
+              } catch {
+                // skip malformed line
+              }
+            }
+          }
+        }
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return;
+        callbacks.onError?.(e instanceof Error ? e : new Error(String(e)));
+      }
+    })();
+
+    return {
+      close: () => ac.abort(),
+    };
   },
 
   /**
-   * Submit a player action (non-streaming)
+   * Get current game state.
    */
-  submitAction: async (action: PlayerAction): Promise<GameActionResponse> => {
-    const response = await apiClient.post<GameActionResponse>('/game/action', {
-      session_id: action.sessionId,
-      action_type: action.actionType,
-      action_id: action.actionId,
-      action_text: action.actionText,
-      target_location: action.targetLocation,
-      target_npc: action.targetNpc,
-      target_item: action.targetItem,
-    });
-    return response.data;
-  },
+  getGameState: (sessionId: string): Promise<GameState> =>
+    apiRequest<GameState>({
+      method: 'GET',
+      url: `/game/state/${sessionId}`,
+    }),
 
   /**
-   * Submit a player action with SSE streaming
-   */
-  submitActionStream: (action: PlayerAction): EventSource => {
-    // TODO: Implement SSE connection
-    const params = new URLSearchParams({
-      sessionId: action.sessionId,
-      actionType: action.actionType,
-      actionId: action.actionId,
-      actionText: action.actionText,
-    });
-
-    if (action.targetLocation) params.append('targetLocation', action.targetLocation);
-    if (action.targetNpc) params.append('targetNpc', action.targetNpc);
-    if (action.targetItem) params.append('targetItem', action.targetItem);
-
-    const url = `${apiClient.defaults.baseURL}/game/action/stream?${params.toString()}`;
-    return new EventSource(url);
-  },
-
-  /**
-   * Get current game state
-   */
-  getGameState: async (sessionId: string): Promise<GameState> => {
-    // TODO: Implement API call
-    const response = await apiClient.get<GameState>(`/game/state/${sessionId}`);
-    return response.data;
-  },
-
-  /**
-   * Get available actions for current state
+   * Get available actions for the current state.
    */
   getAvailableActions: async (sessionId: string): Promise<ActionDefinition[]> => {
-    const response = await apiClient.get<AvailableActionsResponse>(`/game/actions/${sessionId}`);
-    return response.data.actions || [];
+    const data = await apiRequest<AvailableActionsResponse>({
+      method: 'GET',
+      url: `/game/actions/${sessionId}`,
+    });
+    return data.actions ?? [];
   },
 
   /**
-   * End the current turn
+   * End the current turn.
    */
-  endTurn: async (sessionId: string): Promise<TurnEndResponse> => {
-    const response = await apiClient.post<TurnEndResponse>(`/game/end-turn/${sessionId}`);
-    return response.data;
-  },
+  endTurn: (sessionId: string): Promise<TurnEndResponse> =>
+    apiRequest<TurnEndResponse>({
+      method: 'POST',
+      url: `/game/end-turn/${sessionId}`,
+    }),
 
   /**
-   * Save current game
+   * Save current game.
    */
-  saveGame: async (sessionId: string): Promise<SaveGameResponse> => {
-    // TODO: Implement API call
-    const response = await apiClient.post<SaveGameResponse>(`/game/save/${sessionId}`);
-    return response.data;
-  },
+  saveGame: (sessionId: string): Promise<SaveGameResponse> =>
+    apiRequest<SaveGameResponse>({
+      method: 'POST',
+      url: `/game/save/${sessionId}`,
+    }),
 
   /**
-   * Load a saved game
+   * Load a saved game by save ID.
    */
   loadGame: async (saveId: string): Promise<GameState> => {
-    // TODO: Implement API call
-    const response = await apiClient.get<LoadGameResponse>(`/game/load/${saveId}`);
-    return response.data.gameState;
+    const data = await apiRequest<LoadGameResponse>({
+      method: 'GET',
+      url: `/game/load/${saveId}`,
+    });
+    return data.gameState;
   },
 };

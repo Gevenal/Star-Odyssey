@@ -9,10 +9,12 @@ interface UseGameStreamOptions {
 }
 
 /**
- * Hook for managing SSE streaming of game narration
+ * Hook for managing SSE streaming of game narration.
+ * Uses POST /game/action/stream under the hood (fetch + ReadableStream).
  */
 export const useGameStream = (options?: UseGameStreamOptions) => {
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const streamControllerRef = useRef<{ close: () => void } | null>(null);
+  const streamedContentRef = useRef('');
   const { setStreaming, appendStreamContent, clearStreamContent, addNarration } = useGameStore();
 
   const startStream = useCallback(
@@ -23,124 +25,69 @@ export const useGameStream = (options?: UseGameStreamOptions) => {
         onError?: (error: Error) => void;
       }
     ) => {
-      // Clear previous stream content
       clearStreamContent();
+      streamedContentRef.current = '';
       setStreaming(true);
+      streamControllerRef.current = null;
 
-      try {
-        // Create EventSource connection
-        const eventSource = gameApi.submitActionStream(action);
-        eventSourceRef.current = eventSource;
+      const controller = gameApi.submitActionStream(action, {
+        onChunk: (chunk) => {
+          streamedContentRef.current += chunk + ' ';
+          appendStreamContent(chunk + ' ');
+        },
+        onComplete: (response) => {
+          setStreaming(false);
+          streamControllerRef.current = null;
 
-        let completeResponse: GameActionResponse | undefined;
-
-        // Handle incoming messages
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-
-            if (data.type === 'narration') {
-              // Backend sends {"type": "narration", "chunk": "..."}
-              if (data.chunk) {
-                appendStreamContent(data.chunk + ' ');
-              }
-            } else if (data.type === 'complete') {
-              // Backend sends {"type": "complete", "response": {...}}
-              setStreaming(false);
-              completeResponse = data.response as GameActionResponse;
-
-              // Add streamed content to history
-              const { streamingContent } = useGameStore.getState();
-              if (streamingContent.trim()) {
-                addNarration('narrator', streamingContent.trim());
-                clearStreamContent();
-              } else if (completeResponse?.narration) {
-                // If no streamed content, use narration from response
-                addNarration('narrator', completeResponse.narration);
-              }
-
-              // Add Oracle message
-              if (completeResponse?.oracleMessage) {
-                addNarration('oracle', completeResponse.oracleMessage);
-              }
-
-              // Add NPC reactions
-              if (completeResponse?.npcReactions) {
-                completeResponse.npcReactions.forEach((reaction) => {
-                  if (reaction.reactionText) {
-                    addNarration('event', `${reaction.npcId}: ${reaction.reactionText}`);
-                  }
-                });
-              }
-
-              eventSource.close();
-              eventSourceRef.current = null;
-
-              // Call callbacks
-              if (callbacks?.onComplete) {
-                callbacks.onComplete(completeResponse);
-              } else {
-                options?.onComplete?.(completeResponse);
-              }
-            } else if (data.type === 'error') {
-              setStreaming(false);
-              clearStreamContent();
-              eventSource.close();
-              eventSourceRef.current = null;
-
-              const error = new Error(data.message || 'Unknown error');
-              if (callbacks?.onError) {
-                callbacks.onError(error);
-              } else {
-                options?.onError?.(error);
-              }
-            }
-          } catch (parseError) {
-            console.error('Failed to parse SSE message:', parseError);
-            // Continue processing, don't interrupt stream
+          const streamed = streamedContentRef.current.trim();
+          if (streamed) {
+            addNarration('narrator', streamed);
+            clearStreamContent();
+          } else if (response?.narration) {
+            addNarration('narrator', response.narration);
           }
-        };
+          if (response?.oracleMessage) {
+            addNarration('oracle', response.oracleMessage);
+          }
+          if (response?.npcReactions) {
+            response.npcReactions.forEach((reaction) => {
+              if (reaction.reactionText) {
+                addNarration('event', `${reaction.npcId}: ${reaction.reactionText}`);
+              }
+            });
+          }
 
-        // Handle errors
-        eventSource.onerror = (error) => {
-          console.error('SSE Error:', error);
+          if (callbacks?.onComplete) {
+            callbacks.onComplete(response);
+          } else {
+            options?.onComplete?.(response);
+          }
+        },
+        onError: (error) => {
           setStreaming(false);
           clearStreamContent();
-          if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-            eventSourceRef.current = null;
-          }
-
-          const streamError = new Error('Stream connection failed');
+          streamControllerRef.current = null;
           if (callbacks?.onError) {
-            callbacks.onError(streamError);
+            callbacks.onError(error);
           } else {
-            options?.onError?.(streamError);
+            options?.onError?.(error);
           }
-        };
-      } catch (error) {
-        setStreaming(false);
-        clearStreamContent();
-        const streamError = error instanceof Error ? error : new Error('Failed to start stream');
-        if (callbacks?.onError) {
-          callbacks.onError(streamError);
-        } else {
-          options?.onError?.(streamError);
-        }
-      }
+        },
+      });
+
+      streamControllerRef.current = controller;
     },
     [setStreaming, appendStreamContent, clearStreamContent, addNarration, options]
   );
 
   const stopStream = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (streamControllerRef.current) {
+      streamControllerRef.current.close();
+      streamControllerRef.current = null;
       setStreaming(false);
     }
   }, [setStreaming]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopStream();

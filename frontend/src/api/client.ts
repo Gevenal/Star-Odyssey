@@ -1,60 +1,75 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { ApiError } from '@/types/api';
+
+const DEFAULT_BASE_URL = 'http://localhost:8000/api/v1';
+const TIMEOUT_MS = 30000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
+function getBaseURL(): string {
+  const env = (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL;
+  if (typeof env === 'string' && env.trim()) return env.trim();
+  return DEFAULT_BASE_URL;
+}
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
+  baseURL: getBaseURL(),
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  timeout: TIMEOUT_MS,
 });
 
-// Add request interceptor for logging/auth if needed
+function isRetryableError(error: unknown): boolean {
+  const apiErr = error instanceof ApiError ? error : ApiError.fromAxios(error);
+  return apiErr.retryable;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestWithRetry<T>(config: InternalAxiosRequestConfig, retriesLeft: number): Promise<T> {
+  try {
+    const response = await apiClient.request<T>(config);
+    return response.data;
+  } catch (error) {
+    const apiError = error instanceof ApiError ? error : ApiError.fromAxios(error);
+    if (retriesLeft > 0 && isRetryableError(apiError)) {
+      await sleep(RETRY_DELAY_MS * (MAX_RETRIES - retriesLeft + 1));
+      return requestWithRetry(config, retriesLeft - 1);
+    }
+    throw apiError;
+  }
+}
+
+// Request interceptor: optional auth / logging
 apiClient.interceptors.request.use(
-  (config) => {
-    // TODO: Add authentication headers if needed
+  (config: InternalAxiosRequestConfig) => {
+    // Add authentication headers when needed
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Add response interceptor for error handling
+// Response interceptor: normalize all errors to ApiError (no retry here; retry is in requestWithRetry)
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Unified error handling
-    const errorMessage =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.message ||
-      'An unexpected error occurred';
-
-    // Provide user-friendly error messages based on status code
-    let userFriendlyMessage = errorMessage;
-    if (error.response?.status === 404) {
-      userFriendlyMessage = 'Resource not found. Please check your session ID.';
-    } else if (error.response?.status === 400) {
-      userFriendlyMessage = `Invalid request: ${errorMessage}`;
-    } else if (error.response?.status === 409) {
-      userFriendlyMessage = 'Game session has ended or is invalid.';
-    } else if (error.response?.status >= 500) {
-      userFriendlyMessage = 'Server error. Please try again later.';
-    } else if (error.code === 'ECONNABORTED') {
-      userFriendlyMessage = 'Request timeout. Please check your connection.';
-    }
-
+    const apiError = ApiError.fromAxios(error);
     console.error('API Error:', {
-      status: error.response?.status,
-      message: errorMessage,
-      data: error.response?.data,
+      status: apiError.status,
+      code: apiError.code,
+      message: apiError.message,
     });
-
-    // Create enhanced error object
-    const enhancedError = new Error(userFriendlyMessage);
-    (enhancedError as any).status = error.response?.status;
-    (enhancedError as any).originalError = error;
-
-    return Promise.reject(enhancedError);
+    return Promise.reject(apiError);
   }
 );
+
+/**
+ * Execute a request with optional retry for transient failures (5xx, timeout, network).
+ * Use this for non-streaming calls that should be retried automatically.
+ */
+export async function apiRequest<T>(config: AxiosRequestConfig): Promise<T> {
+  return requestWithRetry(config as InternalAxiosRequestConfig, MAX_RETRIES);
+}
 
 export default apiClient;
