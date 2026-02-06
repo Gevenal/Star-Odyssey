@@ -12,7 +12,7 @@ import {
 import Button from '@/components/common/Button';
 import { LoadingSkeleton } from '@/components/common/LoadingSpinner';
 
-// 从 API 类型导入（需要 Team Member A 提供）
+// Import from API types (provided by Team Member A)
 interface ActionDefinition {
   actionId: string;
   displayName: string;
@@ -34,7 +34,7 @@ interface ActionMenuProps {
   className?: string;
 }
 
-// 类别配置
+// Category configuration
 interface CategoryConfig {
   icon: React.ReactNode;
   color: string;
@@ -87,7 +87,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
   disabled = false,
   className,
 }) => {
-  // 按类别分组
+  // Group by category
   const groupedActions = useMemo(() => {
     const groups: Record<string, ActionDefinition[]> = {};
     
@@ -102,7 +102,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
     return groups;
   }, [actions]);
 
-  // 格式化类别名称
+  // Format category name
   const formatCategoryName = (category: string): string => {
     return category
       .replace(/_/g, ' ')
@@ -171,7 +171,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
   );
 };
 
-// 单个动作按钮
+// Single action button
 interface ActionButtonProps {
   action: ActionDefinition;
   config: CategoryConfig;

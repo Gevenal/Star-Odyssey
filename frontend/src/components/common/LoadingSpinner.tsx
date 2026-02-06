@@ -45,7 +45,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   );
 };
 
-// 全屏加载覆盖层
+// Full-screen loading overlay
 export const LoadingOverlay: React.FC<{ message?: string }> = ({ message }) => (
   <div className="fixed inset-0 bg-space-900/80 flex items-center justify-center z-50">
     <div className="text-center">
@@ -57,7 +57,7 @@ export const LoadingOverlay: React.FC<{ message?: string }> = ({ message }) => (
   </div>
 );
 
-// 骨架屏加载
+// Skeleton screen loading
 export const LoadingSkeleton: React.FC<{
   width?: string;
   height?: string;

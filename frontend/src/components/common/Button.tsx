@@ -67,7 +67,7 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-// 内部加载动画
+// Internal loading animation
 const LoadingDots: React.FC = () => (
   <span className="flex gap-1">
     <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />

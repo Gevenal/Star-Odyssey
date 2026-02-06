@@ -24,6 +24,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+logger = get_logger(__name__)
+
 
 def _parse_value(s: str) -> Any:
     """Coerce AI string to int/float/bool for state updates."""
@@ -302,10 +304,34 @@ class GameLoop:
                     npc.update_breakdown_state()
                     gs.set(f"npcs.{npc_id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
 
-        # 6. Increment turn
-        gs.increment_turn()
+        # 6. Get action definition to determine time_cost
+        time_cost = 1  # Default to 1 turn
+        if self.game_data_loader:
+            try:
+                actions = self.game_data_loader.load_player_actions()
+                action_def = actions.get(action.action_id)
+                if action_def and action_def.requirements:
+                    time_cost = action_def.requirements.time_cost or 1
+            except Exception as e:
+                logger.warning(f"[GameLoop] Failed to load action definition for {action.action_id}: {e}, using default time_cost=1")
 
-        # 7. Ending: if AI says so or we detect hard conditions
+        # 7. Execute turn end logic based on time_cost
+        # Each turn: resource decay + NPC actions + increment turn
+        for turn_iteration in range(time_cost):
+            # Execute turn end logic (resource decay, NPC actions, etc.)
+            await self._execute_turn_end_logic(gs, session_id)
+            
+            # Increment turn after each iteration
+            gs.increment_turn()
+            
+            # Check for ending after each turn
+            trig, eid = self._check_ending(gs)
+            if trig:
+                gs.set("game_meta.game_phase", "ending", validate=False)
+                gs.set("game_meta.ending_triggered", eid, validate=False)
+                break  # Stop processing remaining turns if game ended
+
+        # 8. Ending: if AI says so or we detect hard conditions
         trigger = bool(ai_resp.trigger_ending and ai_resp.ending_id)
         ending_id = ai_resp.ending_id
         if not trigger:
@@ -326,6 +352,187 @@ class GameLoop:
             resp.trigger_ending = True
             resp.ending_id = ending_id
         return resp
+
+    async def _execute_turn_end_logic(self, gs: GameStateManager, session_id: str) -> Dict[str, Any]:
+        """
+        Execute turn end logic: resource decay, NPC actions, etc.
+        This is called after each player action to ensure every action triggers a full turn end cycle.
+        Note: Does NOT increment turn or save state (caller handles that).
+        
+        Returns:
+            Dict with npc_actions_taken, critical_alerts, and other turn end information
+        """
+        # Apply resource decay using the decay rule (reads from state_variables.json)
+        game_state_pydantic = StateConverter.snapshot_to_game_state(gs.get_snapshot(), session_id)
+        _, decay_changes = self.decay_rule.apply_decay(game_state_pydantic)
+
+        # Apply decay changes to GameStateManager
+        for resource_name, change_info in decay_changes.items():
+            path = f"resources.{resource_name}"
+            cur = gs.get(path)
+            if isinstance(cur, (int, float)):
+                gs.set(path, change_info["new"], validate=False)
+            elif isinstance(cur, dict) and "current" in cur:
+                gs.set(f"{path}.current", change_info["new"], validate=False)
+
+        # Check for critical resources
+        critical_result = self.critical_rule.validate(game_state_pydantic)
+        critical_alerts = critical_result.metadata.get("warnings", []) if critical_result.metadata else []
+
+        # Execute NPC actions
+        npc_actions_taken = []
+        try:
+            # Convert to GameState for NPCScheduler
+            snapshot_before_npcs = gs.get_snapshot()
+            game_state_pydantic = StateConverter.snapshot_to_game_state(snapshot_before_npcs, session_id)
+            
+            # Update NPC goals dynamically
+            from app.utils.npc_goals_manager import NPCGoalsManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive:
+                    NPCGoalsManager.update_npc_goals(npc, game_state_pydantic)
+                    # Update goals in GameStateManager
+                    gs.set(f"npcs.{npc.id}.goals", npc.goals, validate=False)
+            
+            # Apply automatic stress increase
+            from app.utils.npc_stress_manager import NPCStressManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive:
+                    stress_result = NPCStressManager.apply_stress_increase(npc, game_state_pydantic)
+                    # Update stress in GameStateManager
+                    gs.set(f"npcs.{npc.id}.stress_level", npc.stress_level, validate=False)
+                    # Update breakdown state
+                    gs.set(f"npcs.{npc.id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
+            
+            # Update NPC relationships dynamically
+            from app.utils.npc_relationship_dynamics import NPCRelationshipDynamics
+            relationship_changes = NPCRelationshipDynamics.update_relationships_from_interactions(game_state_pydantic)
+            # Update relationships in GameStateManager
+            for change in relationship_changes:
+                npc1_id = change["npc1_id"]
+                npc2_id = change["npc2_id"]
+                rel = game_state_pydantic.npcs[npc1_id].relationships.get(npc2_id)
+                if rel:
+                    gs.set(f"npcs.{npc1_id}.relationships.{npc2_id}.trust_level", rel.trust_level, validate=False)
+                    gs.set(f"npcs.{npc1_id}.relationships.{npc2_id}.relationship_history", rel.relationship_history, validate=False)
+            
+            # Check for NPC quests
+            from app.utils.npc_quest_manager import NPCQuestManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive and not npc.is_in_breakdown:
+                    quest = NPCQuestManager.generate_quest(npc, game_state_pydantic)
+                    if quest:
+                        # Add quest to player's active quests
+                        if quest.quest_id not in game_state_pydantic.player.active_quests:
+                            game_state_pydantic.player.active_quests.append(quest.quest_id)
+                            gs.set("player.active_quests", game_state_pydantic.player.active_quests, validate=False)
+                            logger.info(f"[GameLoop] NPC {npc.name} gave quest: {quest.title}")
+            
+            # Check for mutiny risk
+            from app.utils.npc_mutiny_manager import NPCMutinyManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive:
+                    mutiny_check = NPCMutinyManager.check_mutiny_risk(npc, game_state_pydantic)
+                    if mutiny_check["will_mutiny"]:
+                        mutiny_result = NPCMutinyManager.trigger_mutiny(npc, game_state_pydantic)
+                        # Update trust in GameStateManager
+                        if "player" in npc.relationships:
+                            rel = npc.relationships["player"]
+                            gs.set(f"npcs.{npc.id}.relationships.player.trust_level", rel.trust_level, validate=False)
+                            gs.set(f"npcs.{npc.id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
+                        # Update morale
+                        if hasattr(game_state_pydantic.world, 'crew_morale'):
+                            gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
+            
+            # Check for sacrifice opportunities
+            from app.utils.npc_sacrifice_manager import NPCSacrificeManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive:
+                    sacrifice_opp = NPCSacrificeManager.check_sacrifice_opportunity(npc, game_state_pydantic)
+                    if sacrifice_opp and sacrifice_opp["willingness"] >= 50:
+                        # NPC decides to sacrifice (probability based on willingness)
+                        if random.random() < (sacrifice_opp["willingness"] / 100.0):
+                            sacrifice_result = NPCSacrificeManager.execute_sacrifice(
+                                npc, game_state_pydantic, sacrifice_opp["opportunity"]["type"]
+                            )
+                            # Update NPC alive status
+                            gs.set(f"npcs.{npc.id}.alive", False, validate=False)
+                            gs.set(f"npcs.{npc.id}.health", 0, validate=False)
+                            # Update resources if applicable
+                            if "benefits" in sacrifice_result:
+                                benefits = sacrifice_result["benefits"]
+                                if "oxygen_restored" in benefits:
+                                    current_oxygen = gs.get("world.resources.oxygen_level.current") or gs.get("world.resources.oxygen_level") or 0
+                                    gs.set("world.resources.oxygen_level.current", 
+                                           min(100, current_oxygen + benefits["oxygen_restored"]), 
+                                           validate=False)
+                                if "reactor_stabilized" in benefits and benefits["reactor_stabilized"]:
+                                    current_reactor = gs.get("world.resources.reactor_level.current") or gs.get("world.resources.reactor_level") or 0
+                                    gs.set("world.resources.reactor_level.current", 
+                                           min(100, current_reactor + 50), 
+                                           validate=False)
+                            # Update morale
+                            if "benefits" in sacrifice_result and "morale_boost" in sacrifice_result["benefits"]:
+                                gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
+            
+            # Check environmental damage
+            from app.utils.npc_health_manager import NPCHealthManager
+            for npc in game_state_pydantic.npcs.values():
+                if npc.alive:
+                    damage_result = NPCHealthManager.check_environmental_damage(npc, game_state_pydantic)
+                    if damage_result:
+                        # Update health in GameStateManager
+                        gs.set(f"npcs.{npc.id}.health", npc.health, validate=False)
+                        if damage_result.get("died"):
+                            gs.set(f"npcs.{npc.id}.alive", False, validate=False)
+                            # Handle death
+                            from app.utils.npc_death_handler import NPCDeathHandler
+                            death_result = NPCDeathHandler.handle_npc_death(
+                                npc, game_state_pydantic, damage_result.get("reason", "environmental_damage")
+                            )
+                            # Update morale/panic
+                            if "morale_impact" in death_result:
+                                gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
+                            if "panic_impact" in death_result:
+                                gs.set("world.panic_level", game_state_pydantic.world.panic_level, validate=False)
+                            # Update stress for other NPCs
+                            for other_npc_id, stress_delta in death_result.get("stress_impact", {}).items():
+                                current_stress = gs.get(f"npcs.{other_npc_id}.stress_level") or 0
+                                gs.set(f"npcs.{other_npc_id}.stress_level", min(100, current_stress + stress_delta), validate=False)
+            
+            # Execute all NPC turns
+            npc_results = await self.npc_scheduler.execute_all_npc_turns(game_state_pydantic)
+            
+            # Apply NPC action state changes to GameStateManager
+            for result in npc_results:
+                if result.get("success") and result.get("state_changes"):
+                    npc_id = result["npc_id"]
+                    changes = result["state_changes"]
+                    
+                    # Apply changes to NPC state
+                    if "current_activity" in changes:
+                        gs.set(f"npcs.{npc_id}.current_activity", changes["current_activity"], validate=False)
+                    if "stress_level" in changes:
+                        gs.set(f"npcs.{npc_id}.stress_level", changes["stress_level"], validate=False)
+                    if "location" in changes:
+                        gs.set(f"npcs.{npc_id}.location", changes["location"], validate=False)
+                    
+                    # Format action for response
+                    npc_actions_taken.append({
+                        "npc_id": npc_id,
+                        "npc_name": result.get("npc_name", "Unknown"),
+                        "action_type": result.get("action_type", "unknown"),
+                        "description": result.get("description", ""),
+                    })
+        except Exception as e:
+            logger.error(f"[GameLoop] Error executing turn end logic: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        return {
+            "npc_actions_taken": npc_actions_taken,
+            "critical_alerts": critical_alerts,
+        }
 
     def _check_ending(self, gs: GameStateManager) -> Tuple[bool, Optional[str]]:
         """Simple ending checks: oxygen, player health, turn limit."""
@@ -483,6 +690,7 @@ class GameLoop:
         """
         Advance turn: resource decay, NPC actions, increment, save.
         Returns a dict compatible with TurnEndResponse.
+        This is called when player clicks "End Turn" button - advances exactly 1 turn.
         """
         state_data = await self.state_manager.get_state(session_id)
         gs = GameStateManager()
@@ -491,181 +699,12 @@ class GameLoop:
         if gs.get("game_meta.game_phase") == "ending":
             raise ValueError("Game has ended")
 
-        # Apply resource decay using the decay rule (reads from state_variables.json)
-        game_state_pydantic = StateConverter.snapshot_to_game_state(gs.get_snapshot(), session_id)
-        _, decay_changes = self.decay_rule.apply_decay(game_state_pydantic)
+        # Execute turn end logic (resource decay, NPC actions, etc.)
+        turn_end_info = await self._execute_turn_end_logic(gs, session_id)
+        npc_actions_taken = turn_end_info.get("npc_actions_taken", [])
+        critical_alerts = turn_end_info.get("critical_alerts", [])
 
-        # Apply decay changes to GameStateManager
-        for resource_name, change_info in decay_changes.items():
-            path = f"resources.{resource_name}"
-            cur = gs.get(path)
-            if isinstance(cur, (int, float)):
-                gs.set(path, change_info["new"], validate=False)
-            elif isinstance(cur, dict) and "current" in cur:
-                gs.set(f"{path}.current", change_info["new"], validate=False)
-
-        # Check for critical resources
-        critical_result = self.critical_rule.validate(game_state_pydantic)
-        critical_alerts = critical_result.metadata.get("warnings", []) if critical_result.metadata else []
-
-        # Execute NPC actions
-        npc_actions_taken = []
-        death_events = []
-        mutiny_events = []
-        sacrifice_events = []
-        try:
-            # Convert to GameState for NPCScheduler
-            snapshot_before_npcs = gs.get_snapshot()
-            game_state_pydantic = StateConverter.snapshot_to_game_state(snapshot_before_npcs, session_id)
-            
-            # Update NPC goals dynamically
-            from app.utils.npc_goals_manager import NPCGoalsManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive:
-                    NPCGoalsManager.update_npc_goals(npc, game_state_pydantic)
-                    # Update goals in GameStateManager
-                    gs.set(f"npcs.{npc.id}.goals", npc.goals, validate=False)
-            
-            # Apply automatic stress increase
-            from app.utils.npc_stress_manager import NPCStressManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive:
-                    stress_result = NPCStressManager.apply_stress_increase(npc, game_state_pydantic)
-                    # Update stress in GameStateManager
-                    gs.set(f"npcs.{npc.id}.stress_level", npc.stress_level, validate=False)
-                    # Update breakdown state
-                    gs.set(f"npcs.{npc.id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
-            
-            # Update NPC relationships dynamically
-            from app.utils.npc_relationship_dynamics import NPCRelationshipDynamics
-            relationship_changes = NPCRelationshipDynamics.update_relationships_from_interactions(game_state_pydantic)
-            # Update relationships in GameStateManager
-            for change in relationship_changes:
-                npc1_id = change["npc1_id"]
-                npc2_id = change["npc2_id"]
-                rel = game_state_pydantic.npcs[npc1_id].relationships.get(npc2_id)
-                if rel:
-                    gs.set(f"npcs.{npc1_id}.relationships.{npc2_id}.trust_level", rel.trust_level, validate=False)
-                    gs.set(f"npcs.{npc1_id}.relationships.{npc2_id}.relationship_history", rel.relationship_history, validate=False)
-            
-            # Check for NPC quests
-            from app.utils.npc_quest_manager import NPCQuestManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive and not npc.is_in_breakdown:
-                    quest = NPCQuestManager.generate_quest(npc, game_state_pydantic)
-                    if quest:
-                        # Add quest to player's active quests
-                        if quest.quest_id not in game_state_pydantic.player.active_quests:
-                            game_state_pydantic.player.active_quests.append(quest.quest_id)
-                            gs.set("player.active_quests", game_state_pydantic.player.active_quests, validate=False)
-                            logger.info(f"[GameLoop] NPC {npc.name} gave quest: {quest.title}")
-            
-            # Check for mutiny risk
-            mutiny_events = []
-            from app.utils.npc_mutiny_manager import NPCMutinyManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive:
-                    mutiny_check = NPCMutinyManager.check_mutiny_risk(npc, game_state_pydantic)
-                    if mutiny_check["will_mutiny"]:
-                        mutiny_result = NPCMutinyManager.trigger_mutiny(npc, game_state_pydantic)
-                        mutiny_events.append(mutiny_result)
-                        # Update trust in GameStateManager
-                        if "player" in npc.relationships:
-                            rel = npc.relationships["player"]
-                            gs.set(f"npcs.{npc.id}.relationships.player.trust_level", rel.trust_level, validate=False)
-                            gs.set(f"npcs.{npc.id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
-                        # Update morale
-                        if hasattr(game_state_pydantic.world, 'crew_morale'):
-                            gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
-            
-            # Check for sacrifice opportunities
-            sacrifice_events = []
-            from app.utils.npc_sacrifice_manager import NPCSacrificeManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive:
-                    sacrifice_opp = NPCSacrificeManager.check_sacrifice_opportunity(npc, game_state_pydantic)
-                    if sacrifice_opp and sacrifice_opp["willingness"] >= 50:
-                        # NPC decides to sacrifice (probability based on willingness)
-                        if random.random() < (sacrifice_opp["willingness"] / 100.0):
-                            sacrifice_result = NPCSacrificeManager.execute_sacrifice(
-                                npc, game_state_pydantic, sacrifice_opp["opportunity"]["type"]
-                            )
-                            sacrifice_events.append(sacrifice_result)
-                            # Update NPC alive status
-                            gs.set(f"npcs.{npc.id}.alive", False, validate=False)
-                            gs.set(f"npcs.{npc.id}.health", 0, validate=False)
-                            # Update resources if applicable
-                            if "benefits" in sacrifice_result:
-                                benefits = sacrifice_result["benefits"]
-                                if "oxygen_restored" in benefits:
-                                    current_oxygen = gs.get("world.resources.oxygen_level.current") or gs.get("world.resources.oxygen_level") or 0
-                                    gs.set("world.resources.oxygen_level.current", 
-                                           min(100, current_oxygen + benefits["oxygen_restored"]), 
-                                           validate=False)
-                                if "reactor_stabilized" in benefits and benefits["reactor_stabilized"]:
-                                    current_reactor = gs.get("world.resources.reactor_level.current") or gs.get("world.resources.reactor_level") or 0
-                                    gs.set("world.resources.reactor_level.current", 
-                                           min(100, current_reactor + 50), 
-                                           validate=False)
-                            # Update morale
-                            if "benefits" in sacrifice_result and "morale_boost" in sacrifice_result["benefits"]:
-                                gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
-            
-            # Check environmental damage
-            from app.utils.npc_health_manager import NPCHealthManager
-            for npc in game_state_pydantic.npcs.values():
-                if npc.alive:
-                    damage_result = NPCHealthManager.check_environmental_damage(npc, game_state_pydantic)
-                    if damage_result:
-                        # Update health in GameStateManager
-                        gs.set(f"npcs.{npc.id}.health", npc.health, validate=False)
-                        if damage_result.get("died"):
-                            gs.set(f"npcs.{npc.id}.alive", False, validate=False)
-                            # Handle death
-                            from app.utils.npc_death_handler import NPCDeathHandler
-                            death_result = NPCDeathHandler.handle_npc_death(
-                                npc, game_state_pydantic, damage_result.get("reason", "environmental_damage")
-                            )
-                            death_events.append(death_result)
-                            # Update morale/panic
-                            if "morale_impact" in death_result:
-                                gs.set("world.crew_morale", game_state_pydantic.world.crew_morale, validate=False)
-                            if "panic_impact" in death_result:
-                                gs.set("world.panic_level", game_state_pydantic.world.panic_level, validate=False)
-                            # Update stress for other NPCs
-                            for other_npc_id, stress_delta in death_result.get("stress_impact", {}).items():
-                                current_stress = gs.get(f"npcs.{other_npc_id}.stress_level") or 0
-                                gs.set(f"npcs.{other_npc_id}.stress_level", min(100, current_stress + stress_delta), validate=False)
-            
-            # Execute all NPC turns
-            npc_results = await self.npc_scheduler.execute_all_npc_turns(game_state_pydantic)
-            
-            # Apply NPC action state changes to GameStateManager
-            for result in npc_results:
-                if result.get("success") and result.get("state_changes"):
-                    npc_id = result["npc_id"]
-                    changes = result["state_changes"]
-                    
-                    # Apply changes to NPC state
-                    if "current_activity" in changes:
-                        gs.set(f"npcs.{npc_id}.current_activity", changes["current_activity"], validate=False)
-                    if "stress_level" in changes:
-                        gs.set(f"npcs.{npc_id}.stress_level", changes["stress_level"], validate=False)
-                    if "location" in changes:
-                        gs.set(f"npcs.{npc_id}.location", changes["location"], validate=False)
-                    
-                    # Format action for response
-                    npc_actions_taken.append({
-                        "npc_id": npc_id,
-                        "npc_name": result.get("npc_name", "Unknown"),
-                        "action_type": result.get("action_type", "unknown"),
-                        "description": result.get("description", ""),
-                    })
-        except Exception as e:
-            print(f"[GameLoop] Error executing NPC actions: {e}")
-            import traceback
-            traceback.print_exc()
-
+        # Increment turn (End Turn button advances exactly 1 turn)
         gs.increment_turn()
 
         # Ending check
@@ -683,57 +722,13 @@ class GameLoop:
             action_descriptions = [f"{action['npc_name']} {action['description']}" for action in npc_actions_taken[:3]]
             narration_parts.append("Around the ship: " + "; ".join(action_descriptions))
         
-        # Add death events to narration
-        if death_events:
-            for death_event in death_events:
-                death_npc = death_event["death_event"]
-                from app.utils.npc_death_handler import NPCDeathHandler
-                # Get NPC for narration - reload state if needed
-                snapshot_for_npc = gs.get_snapshot()
-                game_state_for_npc = StateConverter.snapshot_to_game_state(snapshot_for_npc, session_id)
-                npc = game_state_for_npc.npcs.get(death_npc["npc_id"])
-                if npc:
-                    death_narration = NPCDeathHandler.generate_death_narration(npc, death_npc["cause"])
-                    narration_parts.append(death_narration)
-        
-        # Add mutiny events to narration
-        if mutiny_events:
-            for mutiny_event in mutiny_events:
-                mutiny_npc_id = mutiny_event["mutiny_event"]["npc_id"]
-                snapshot_for_mutiny = gs.get_snapshot()
-                game_state_for_mutiny = StateConverter.snapshot_to_game_state(snapshot_for_mutiny, session_id)
-                mutiny_npc = game_state_for_mutiny.npcs.get(mutiny_npc_id)
-                if mutiny_npc:
-                    from app.utils.npc_mutiny_manager import NPCMutinyManager
-                    mutiny_narration = NPCMutinyManager.generate_mutiny_narration(mutiny_npc)
-                    narration_parts.append(mutiny_narration)
-        
-        # Add sacrifice events to narration
-        if sacrifice_events:
-            for sacrifice_event in sacrifice_events:
-                if "narration" in sacrifice_event:
-                    narration_parts.append(sacrifice_event["narration"])
-
-        # Combine all events
-        all_events = []
-        if death_events:
-            all_events.extend([e["death_event"] for e in death_events])
-        if mutiny_events:
-            all_events.extend([e["mutiny_event"] for e in mutiny_events])
-        if sacrifice_events:
-            all_events.extend([e["sacrifice_event"] for e in sacrifice_events])
-        
         return {
-            "events_occurred": all_events,
+            "events_occurred": [],
             "npc_actions_taken": npc_actions_taken,
             "state_summary": {
                 "resources_decayed": True,
-                "decay_changes": decay_changes,
                 "turn_advanced": True,
                 "npc_actions": len(npc_actions_taken),
-                "deaths": len(death_events),
-                "mutinies": len(mutiny_events),
-                "sacrifices": len(sacrifice_events)
             },
             "narration": " ".join(narration_parts),
             "critical_alerts": critical_alerts,

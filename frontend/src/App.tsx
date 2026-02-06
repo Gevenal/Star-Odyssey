@@ -40,7 +40,7 @@ function HomeRoute() {
         addNarration("oracle", response.oracleMessage);
       }
 
-      // 真正的“页面跳转”：URL 会变成 /game/<sessionId>
+      // Actual page navigation: URL will become /game/<sessionId>
       navigate(`/game/${response.sessionId}`);
     } catch (err) {
       console.error("Failed to start game:", err);
@@ -54,7 +54,7 @@ function HomeRoute() {
     alert("Load game feature coming soon!");
   };
 
-  // 保留原有的 loading/error UI（现在只在 HomeRoute 里）
+  // Keep original loading/error UI (now only in HomeRoute)
   if (isLoading) {
     return (
       <div className="min-h-screen bg-space-900 flex items-center justify-center">
@@ -96,10 +96,10 @@ function GameRoute() {
   useEffect(() => {
     if (!sessionId) return;
 
-    // 1) 把 sessionId 写回 store（不要在 render 里写）
+    // 1) Write sessionId back to store (don't write in render)
     setSession(sessionId);
 
-    // 2) 如果刷新进来 store 没状态，就从后端拉一份
+    // 2) If store has no state on refresh, fetch from backend
     if (!gameState) {
       setHydrating(true);
       setHydrateError(null);

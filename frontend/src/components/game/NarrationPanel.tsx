@@ -22,7 +22,7 @@ export const NarrationPanel: React.FC<NarrationPanelProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // 自动滚动到底部
+  // Auto-scroll to bottom
   useEffect(() => {
     if (autoScroll && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -78,7 +78,7 @@ export const NarrationPanel: React.FC<NarrationPanelProps> = ({
   );
 };
 
-// 单条叙事条目
+// Single narration entry
 interface NarrationEntryProps {
   entry: NarrationEntry;
 }
@@ -96,7 +96,7 @@ const NarrationEntry: React.FC<NarrationEntryProps> = ({ entry }) => {
   );
 };
 
-// 条目头部（图标 + 类型标签）
+// Entry header (icon + type label)
 interface EntryHeaderProps {
   type: NarrationEntry['type'];
   timestamp?: number;
@@ -122,7 +122,7 @@ const EntryHeader: React.FC<EntryHeaderProps> = ({ type, timestamp }) => {
   );
 };
 
-// 配置
+// Configuration
 interface EntryConfig {
   icon: React.ReactNode;
   iconColor: string;

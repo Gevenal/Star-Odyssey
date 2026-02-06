@@ -69,7 +69,7 @@ export const ResourceMonitor: React.FC<ResourceMonitorProps> = ({
   );
 };
 
-// 单个资源项
+// Single resource item
 interface ResourceItemProps {
   config: ResourceConfig;
   resource: ResourceLevel;

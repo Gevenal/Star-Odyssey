@@ -21,7 +21,7 @@ export const NPCCard: React.FC<NPCCardProps> = ({
 }) => {
   const { name, role, location, alive, health, stressLevel, currentActivity } = npc;
 
-  // 获取状态颜色
+  // Get status color
   const getStatusColor = (): string => {
     if (!alive) return 'border-red-500/50 bg-red-500/10';
     if (health < 30 || stressLevel > 80) return 'border-yellow-500/50';
@@ -29,7 +29,7 @@ export const NPCCard: React.FC<NPCCardProps> = ({
     return 'border-space-600';
   };
 
-  // 获取角色图标背景色
+  // Get role icon background color
   const getRoleColor = (): string => {
     const roleColors: Record<string, string> = {
       Captain: 'bg-yellow-500/20 text-yellow-400',
@@ -42,7 +42,7 @@ export const NPCCard: React.FC<NPCCardProps> = ({
     return roleColors[role] || roleColors.default;
   };
 
-  // 格式化位置显示
+  // Format location display
   const formatLocation = (loc: string): string => {
     return loc
       .replace(/_/g, ' ')

@@ -37,7 +37,7 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   className,
 }) => {
-  // ESC 键关闭
+  // Close on ESC key
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (closeOnEscape && event.key === 'Escape') {
@@ -123,7 +123,7 @@ export const Modal: React.FC<ModalProps> = ({
   return createPortal(modalContent, document.body);
 };
 
-// 确认对话框快捷组件
+// Confirmation dialog shortcut component
 interface ConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;

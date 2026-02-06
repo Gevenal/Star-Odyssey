@@ -44,12 +44,12 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   warningThreshold,
   className,
 }) => {
-  // 计算百分比
+  // Calculate percentage
   const range = max - min;
   const normalizedValue = Math.max(min, Math.min(max, value));
   const percentage = range > 0 ? ((normalizedValue - min) / range) * 100 : 0;
 
-  // 根据阈值自动确定颜色
+  // Automatically determine color based on thresholds
   const getAutoColor = (): ProgressBarColor => {
     if (criticalThreshold !== undefined && normalizedValue <= criticalThreshold) {
       return 'red';
@@ -64,7 +64,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     ? getAutoColor() 
     : color;
 
-  // 格式化标签
+  // Format label
   const formatLabel = (): string => {
     switch (labelFormat) {
       case 'value':

@@ -24,18 +24,18 @@ export const NPCPanel: React.FC<NPCPanelProps> = ({
   const [filter, setFilter] = useState<FilterOption>('alive');
   const [selectedNPC, setSelectedNPC] = useState<NPCState | null>(null);
 
-  // 转换为数组并排序
+  // Convert to array and sort
   const npcList = useMemo(() => {
     const list = Object.values(npcs);
     
-    // 根据 filter 过滤
+    // Filter based on filter option
     const filtered = list.filter((npc) => {
       switch (filter) {
         case 'alive':
           return npc.alive;
         case 'critical':
           return npc.alive && (npc.health < 30 || npc.stressLevel > 80);
-        // 'here' 需要玩家位置，这里简化处理
+        // 'here' requires player location, simplified handling here
         case 'here':
         case 'all':
         default:
@@ -43,7 +43,7 @@ export const NPCPanel: React.FC<NPCPanelProps> = ({
       }
     });
 
-    // 排序：存活优先，然后按健康状况
+    // Sort: alive first, then by health status
     return filtered.sort((a, b) => {
       if (a.alive !== b.alive) return a.alive ? -1 : 1;
       return b.health - a.health;
@@ -55,7 +55,7 @@ export const NPCPanel: React.FC<NPCPanelProps> = ({
     onNPCClick?.(npc);
   };
 
-  // 统计
+  // Statistics
   const stats = useMemo(() => {
     const list = Object.values(npcs);
     return {
@@ -137,7 +137,7 @@ export const NPCPanel: React.FC<NPCPanelProps> = ({
   );
 };
 
-// NPC 详情弹窗
+// NPC detail modal
 interface NPCDetailModalProps {
   npc: NPCState | null;
   isOpen: boolean;

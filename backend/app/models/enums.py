@@ -31,6 +31,7 @@ class ActionCategory(str, Enum):
     INVESTIGATION = "investigation"
     CRITICAL_DECISION = "critical_decision"
     REST_RECOVERY = "rest_recovery"
+    FREEFORM = "freeform"
 
 
 class Atmosphere(str, Enum):

@@ -1,5 +1,5 @@
 import React from 'react';
-import { clsx } from 'clsx';
+import clsx from 'clsx';
 import { Settings, Save, LogOut, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
 import Button from '@/components/common/Button';
@@ -16,12 +16,12 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveClick,
   onExitClick,
   className,
-}) => {
+}: HeaderProps) => {
   const { gameState } = useGameStore();
   const world = gameState?.world;
   const resources = world?.resources;
 
-  // 格式化时间显示
+  // Format time display
   const formatTimeOfDay = (time: string): string => {
     const timeMap: Record<string, string> = {
       morning: '🌅 Morning',
@@ -32,10 +32,10 @@ export const Header: React.FC<HeaderProps> = ({
     return timeMap[time] || time;
   };
 
-  // 检查是否有危机资源
+  // Check if there are critical resources
   const hasCriticalResource = resources && (
-    resources.oxygenLevel.current <= resources.oxygenLevel.criticalThreshold ||
-    resources.powerLevel.current <= resources.powerLevel.criticalThreshold
+    (resources.oxygenLevel?.current ?? 0) <= (resources.oxygenLevel?.criticalThreshold ?? 0) ||
+    (resources.powerLevel?.current ?? 0) <= (resources.powerLevel?.criticalThreshold ?? 0)
   );
 
   return (
@@ -95,13 +95,13 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-4">
             <ResourceQuickStat
               label="O₂"
-              value={resources.oxygenLevel.current}
-              critical={resources.oxygenLevel.criticalThreshold}
+              value={resources.oxygenLevel?.current ?? 0}
+              critical={resources.oxygenLevel?.criticalThreshold ?? 0}
             />
             <ResourceQuickStat
               label="PWR"
-              value={resources.powerLevel.current}
-              critical={resources.powerLevel.criticalThreshold}
+              value={resources.powerLevel?.current ?? 0}
+              critical={resources.powerLevel?.criticalThreshold ?? 0}
             />
           </div>
         )}
@@ -129,14 +129,14 @@ export const Header: React.FC<HeaderProps> = ({
   );
 };
 
-// 快速资源显示组件
+// Quick resource display component
 interface ResourceQuickStatProps {
   label: string;
   value: number;
   critical: number;
 }
 
-const ResourceQuickStat: React.FC<ResourceQuickStatProps> = ({ label, value, critical }) => {
+const ResourceQuickStat: React.FC<ResourceQuickStatProps> = ({ label, value, critical }: ResourceQuickStatProps) => {
   const isCritical = value <= critical;
   const isWarning = value <= critical * 1.5;
 
