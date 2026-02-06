@@ -1,50 +1,176 @@
-import React from 'react';
+import React, { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { clsx } from 'clsx';
+import { X } from 'lucide-react';
+import Button from './Button';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  showCloseButton?: boolean;
+  closeOnOverlayClick?: boolean;
+  closeOnEscape?: boolean;
+  footer?: React.ReactNode;
+  className?: string;
 }
+
+const sizeStyles = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+  full: 'max-w-4xl',
+};
 
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
   title,
   children,
-  maxWidth = 'md',
+  size = 'md',
+  showCloseButton = true,
+  closeOnOverlayClick = true,
+  closeOnEscape = true,
+  footer,
+  className,
 }) => {
+  // ESC 键关闭
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (closeOnEscape && event.key === 'Escape') {
+        onClose();
+      }
+    },
+    [closeOnEscape, onClose]
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, handleKeyDown]);
+
   if (!isOpen) return null;
 
-  // TODO: Implement proper modal with backdrop, animations
-  const maxWidthClasses = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg',
-    xl: 'max-w-xl',
+  const handleOverlayClick = (event: React.MouseEvent) => {
+    if (closeOnOverlayClick && event.target === event.currentTarget) {
+      onClose();
+    }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={handleOverlayClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? 'modal-title' : undefined}
+    >
       <div
-        className="absolute inset-0 bg-black bg-opacity-75"
-        onClick={onClose}
-      />
-
-      {/* Modal content */}
-      <div className={`relative bg-gray-800 rounded-lg shadow-xl ${maxWidthClasses[maxWidth]} w-full mx-4`}>
-        {title && (
-          <div className="border-b border-gray-700 px-6 py-4">
-            <h2 className="text-xl font-bold text-white">{title}</h2>
+        className={clsx(
+          'w-full bg-space-800 border border-space-600 rounded-lg shadow-xl',
+          'transform transition-all duration-200',
+          'animate-in fade-in zoom-in-95',
+          sizeStyles[size],
+          className
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        {(title || showCloseButton) && (
+          <div className="flex items-center justify-between px-6 py-4 border-b border-space-600">
+            {title && (
+              <h2 id="modal-title" className="text-xl font-bold text-cyan-400 font-display">
+                {title}
+              </h2>
+            )}
+            {showCloseButton && (
+              <button
+                onClick={onClose}
+                className="p-1 text-gray-400 hover:text-white transition-colors rounded hover:bg-space-700"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            )}
           </div>
         )}
 
-        <div className="p-6">
+        {/* Body */}
+        <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
           {children}
         </div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-space-600">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
+
+// 确认对话框快捷组件
+interface ConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'primary';
+  isLoading?: boolean;
+}
+
+export const ConfirmModal: React.FC<ConfirmModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  variant = 'primary',
+  isLoading = false,
+}) => {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+            {cancelText}
+          </Button>
+          <Button
+            variant={variant === 'danger' ? 'danger' : 'primary'}
+            onClick={onConfirm}
+            isLoading={isLoading}
+          >
+            {confirmText}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-gray-300">{message}</p>
+    </Modal>
+  );
+};
+
+export default Modal;
