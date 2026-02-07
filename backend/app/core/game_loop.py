@@ -297,18 +297,18 @@ class GameLoop:
                 val = _parse_value(sc.new_value)
                 gs.set(path, val, validate=False)
 
-        # 5.4. Check quest completion
-        from app.utils.npc_quest_manager import NPCQuestManager
-        from app.models.npc_quest import NPCQuest
+        # 5.4. Check quest completion (placeholder)
+        from app.utils.npc_quest_manager import NPCQuestManager  # noqa: F401
+        from app.models.npc_quest import NPCQuest  # noqa: F401
         # Note: We'd need to store quests in game state to check completion
         # For now, quest completion is checked when player actions match quest objectives
-        
+
         # 5.5. Apply NPC reactions and update relationships
         for reaction in (ai_resp.npc_reactions or []):
             npc_id = reaction.npc_id
             if npc_id in game_state_pydantic.npcs:
                 npc = game_state_pydantic.npcs[npc_id]
-                
+
                 # Update trust level if disposition_change is provided
                 if reaction.disposition_change is not None:
                     # Ensure relationship exists
@@ -319,13 +319,13 @@ class GameLoop:
                             trust_level=0,
                             relationship_history=[]
                         )
-                    
+
                     rel = npc.relationships["player"]
                     old_trust = rel.trust_level
                     new_trust = old_trust + reaction.disposition_change
                     new_trust = max(-100, min(100, new_trust))
                     rel.trust_level = new_trust
-                    
+
                     # Add to history if significant change
                     if abs(reaction.disposition_change) >= 5:
                         rel.relationship_history.append(
@@ -334,12 +334,13 @@ class GameLoop:
                         # Keep history limited
                         if len(rel.relationship_history) > 10:
                             rel.relationship_history = rel.relationship_history[-10:]
-                    
+
                     # Update in GameStateManager
                     gs.set(f"npcs.{npc_id}.relationships.player.trust_level", new_trust, validate=False)
                     if rel.relationship_history:
-                        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history", rel.relationship_history, validate=False)
-                    
+                        gs.set(f"npcs.{npc_id}.relationships.player.relationship_history",
+                            rel.relationship_history, validate=False)
+
                     # Check for secret revelation after trust change
                     from app.utils.npc_secret_manager import NPCSecretManager
                     context = {
@@ -359,26 +360,28 @@ class GameLoop:
                                 None
                             )
                             if secret_idx is not None:
-                                gs.set(f"npcs.{npc_id}.secrets.{secret_idx}.known_by_player", True, validate=False)
-                        
+                                gs.set(f"npcs.{npc_id}.secrets.{secret_idx}.known_by_player",
+                                    True, validate=False)
+
                         # Update player's discovered_secrets
                         NPCSecretManager.update_player_discovered_secrets(
                             game_state_pydantic, revealed_secrets, npc_id
                         )
                         # Update in GameStateManager
-                        gs.set("player.discovered_secrets", game_state_pydantic.player.discovered_secrets, validate=False)
-                
+                        gs.set("player.discovered_secrets",
+                            game_state_pydantic.player.discovered_secrets, validate=False)
+
                 # Update current_activity if provided
                 if reaction.new_activity:
                     npc.current_activity = reaction.new_activity
                     gs.set(f"npcs.{npc_id}.current_activity", reaction.new_activity, validate=False)
-                
+
                 # Update breakdown state if stress changed
                 if npc.stress_level:
                     npc.update_breakdown_state()
                     gs.set(f"npcs.{npc_id}.is_in_breakdown", npc.is_in_breakdown, validate=False)
 
-        # 6. Get action definition to determine time_cost
+        # 6. Determine time_cost
         time_cost = 1  # Default to 1 turn
         if self.game_data_loader:
             try:
@@ -387,40 +390,81 @@ class GameLoop:
                 if action_def and action_def.requirements:
                     time_cost = action_def.requirements.time_cost or 1
             except Exception as e:
-                logger.warning(f"[GameLoop] Failed to load action definition for {action.action_id}: {e}, using default time_cost=1")
+                logger.warning(
+                    f"[GameLoop] Failed to load action definition for {action.action_id}: {e}, "
+                    "using default time_cost=1"
+                )
+
+        # --- Helper: finalize ending only once ---
+        async def _ensure_ending_generated() -> None:
+            ending_triggered = gs.get("game_meta.ending_triggered")
+            if not ending_triggered:
+                return
+            if gs.get("game_meta.ending"):
+                return
+
+            final_snapshot = gs.get_snapshot()
+            final_state_pyd = StateConverter.snapshot_to_game_state(final_snapshot, session_id)
+
+            try:
+                ending_payload = await self.ending_generator.generate_ending(final_state_pyd)
+            except Exception as exc:
+                # Avoid hard-crashing the game on ending generation failure.
+                logger.exception(
+                    "Ending generation failed; storing fallback ending. "
+                    f"(session_id={session_id}, ending_id={ending_triggered})",
+                    exc_info=exc,
+                )
+                ending_payload = {
+                    "ending_type": str(ending_triggered),
+                    "title": "The End",
+                    "narration": "(Ending generation failed.)",
+                    "survivor_fates": {},
+                    "epilogue": "",
+                    "statistics": {},
+                }
+
+            gs.set("game_meta.ending", ending_payload, validate=False)
 
         # 7. Execute turn end logic based on time_cost
         # Each turn: resource decay + NPC actions + increment turn
-        for turn_iteration in range(time_cost):
-            # Execute turn end logic (resource decay, NPC actions, etc.)
+        trigger = False
+        ending_id = None
+
+        for _ in range(time_cost):
             await self._execute_turn_end_logic(gs, session_id)
-            
-            # Increment turn after each iteration
             gs.increment_turn()
-            
-            # Check for ending after each turn
+
             trig, eid = self._check_ending(gs)
             if trig:
+                trigger = True
+                ending_id = eid
                 gs.set("game_meta.game_phase", "ending", validate=False)
                 gs.set("game_meta.ending_triggered", eid, validate=False)
-                break  # Stop processing remaining turns if game ended
+                break
 
         # 8. Ending: if AI says so or we detect hard conditions
-        trigger = bool(ai_resp.trigger_ending and ai_resp.ending_id)
-        ending_id = ai_resp.ending_id
         if not trigger:
-            trig, eid = self._check_ending(gs)
-            if trig:
-                trigger, ending_id = True, eid
-        if trigger:
-            gs.set("game_meta.game_phase", "ending", validate=False)
-            gs.set("game_meta.ending_triggered", ending_id, validate=False)
+            trigger = bool(ai_resp.trigger_ending and ai_resp.ending_id)
+            ending_id = ai_resp.ending_id
 
-        # 8. Save
+            if not trigger:
+                trig, eid = self._check_ending(gs)
+                if trig:
+                    trigger, ending_id = True, eid
+
+            if trigger:
+                gs.set("game_meta.game_phase", "ending", validate=False)
+                gs.set("game_meta.ending_triggered", ending_id, validate=False)
+
+        # 8.5 Generate + store ending payload (if ended)
+        await _ensure_ending_generated()
+
+        # 9. Save
         final = gs.get_snapshot()
         await self.state_manager.update_state(session_id, final)
 
-        # 9. Return (override trigger/ending_id if we detected from _check_ending)
+        # 10. Return (override trigger/ending_id if we detected from _check_ending)
         resp = _ai_to_model(ai_resp)
         if trigger:
             resp.trigger_ending = True

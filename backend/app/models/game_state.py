@@ -1,13 +1,12 @@
 """Game state model."""
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import Field
 from app.models.base import CamelCaseModel
 from app.models.enums import GamePhase, TurnPhase
 from app.models.player import PlayerState
 from app.models.npc import NPCState
 from app.models.world import WorldState
-
 
 class GameState(CamelCaseModel):
     """Complete game state snapshot."""
@@ -57,6 +56,7 @@ class GameState(CamelCaseModel):
         description="Ending ID if game has ended",
         examples=["ending_death", "ending_rescue", "ending_oracle_merge"]
     )
+    ending: Optional[Dict[str, Any]] = None
 
     def get_npc(self, npc_id: str) -> Optional[NPCState]:
         """Get NPC by ID."""
