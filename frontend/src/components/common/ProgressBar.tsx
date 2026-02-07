@@ -1,55 +1,105 @@
 import React from 'react';
+import { clsx } from 'clsx';
+
+export type ProgressBarColor = 'cyan' | 'green' | 'yellow' | 'red' | 'purple';
 
 interface ProgressBarProps {
-  current: number;
-  max: number;
-  label?: string;
-  showPercentage?: boolean;
-  color?: 'blue' | 'green' | 'red' | 'yellow' | 'purple';
+  value: number;
+  max?: number;
+  min?: number;
+  color?: ProgressBarColor;
+  showLabel?: boolean;
+  labelFormat?: 'percent' | 'value' | 'both';
+  size?: 'sm' | 'md' | 'lg';
+  animated?: boolean;
   criticalThreshold?: number;
+  warningThreshold?: number;
+  className?: string;
 }
 
-export const ProgressBar: React.FC<ProgressBarProps> = ({
-  current,
-  max,
-  label,
-  showPercentage = false,
-  color = 'blue',
-  criticalThreshold,
-}) => {
-  // TODO: Implement progress bar with color coding
-  const percentage = Math.min((current / max) * 100, 100);
-  const isCritical = criticalThreshold && current <= criticalThreshold;
+const colorStyles: Record<ProgressBarColor, string> = {
+  cyan: 'bg-cyan-500',
+  green: 'bg-green-500',
+  yellow: 'bg-yellow-500',
+  red: 'bg-red-500',
+  purple: 'bg-purple-500',
+};
 
-  const colorClasses = {
-    blue: 'bg-blue-600',
-    green: 'bg-green-600',
-    red: 'bg-red-600',
-    yellow: 'bg-yellow-600',
-    purple: 'bg-purple-600',
+const sizeStyles: Record<'sm' | 'md' | 'lg', string> = {
+  sm: 'h-1.5',
+  md: 'h-2.5',
+  lg: 'h-4',
+};
+
+export const ProgressBar: React.FC<ProgressBarProps> = ({
+  value,
+  max = 100,
+  min = 0,
+  color = 'cyan',
+  showLabel = false,
+  labelFormat = 'percent',
+  size = 'md',
+  animated = false,
+  criticalThreshold,
+  warningThreshold,
+  className,
+}) => {
+  // Calculate percentage
+  const range = max - min;
+  const normalizedValue = Math.max(min, Math.min(max, value));
+  const percentage = range > 0 ? ((normalizedValue - min) / range) * 100 : 0;
+
+  // Automatically determine color based on thresholds
+  const getAutoColor = (): ProgressBarColor => {
+    if (criticalThreshold !== undefined && normalizedValue <= criticalThreshold) {
+      return 'red';
+    }
+    if (warningThreshold !== undefined && normalizedValue <= warningThreshold) {
+      return 'yellow';
+    }
+    return color;
+  };
+
+  const finalColor = criticalThreshold !== undefined || warningThreshold !== undefined 
+    ? getAutoColor() 
+    : color;
+
+  // Format label
+  const formatLabel = (): string => {
+    switch (labelFormat) {
+      case 'value':
+        return `${normalizedValue}/${max}`;
+      case 'both':
+        return `${normalizedValue}/${max} (${percentage.toFixed(0)}%)`;
+      case 'percent':
+      default:
+        return `${percentage.toFixed(0)}%`;
+    }
   };
 
   return (
-    <div className="w-full">
-      {label && (
-        <div className="flex justify-between mb-1 text-sm">
-          <span className="text-gray-300">{label}</span>
-          {showPercentage && (
-            <span className={isCritical ? 'text-red-400' : 'text-gray-400'}>
-              {current}/{max}
-            </span>
-          )}
+    <div className={clsx('w-full', className)}>
+      {showLabel && (
+        <div className="flex justify-between mb-1 text-xs text-gray-400">
+          <span>{formatLabel()}</span>
         </div>
       )}
-
-      <div className="w-full bg-gray-700 rounded-full h-2.5">
+      <div className={clsx('w-full bg-space-700 rounded-full overflow-hidden', sizeStyles[size])}>
         <div
-          className={`h-2.5 rounded-full transition-all ${
-            isCritical ? 'bg-red-600' : colorClasses[color]
-          }`}
+          className={clsx(
+            'h-full rounded-full transition-all duration-300 ease-out',
+            colorStyles[finalColor],
+            animated && 'animate-pulse'
+          )}
           style={{ width: `${percentage}%` }}
+          role="progressbar"
+          aria-valuenow={normalizedValue}
+          aria-valuemin={min}
+          aria-valuemax={max}
         />
       </div>
     </div>
   );
 };
+
+export default ProgressBar;

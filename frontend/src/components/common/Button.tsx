@@ -1,52 +1,79 @@
 import React from 'react';
+import clsx from 'clsx';
 
-interface ButtonProps {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
-  disabled?: boolean;
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  isLoading?: boolean;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   fullWidth?: boolean;
-  className?: string;
 }
+
+const variantStyles: Record<ButtonVariant, string> = {
+  primary: 'bg-cyan-500 hover:bg-cyan-400 text-space-900 font-bold',
+  secondary: 'bg-space-700 hover:bg-space-600 text-gray-100 border border-space-500',
+  danger: 'bg-red-500 hover:bg-red-400 text-white font-bold',
+  ghost: 'bg-transparent hover:bg-space-700 text-gray-300',
+};
+
+const sizeStyles: Record<ButtonSize, string> = {
+  sm: 'px-3 py-1.5 text-sm',
+  md: 'px-4 py-2 text-base',
+  lg: 'px-6 py-3 text-lg',
+};
 
 export const Button: React.FC<ButtonProps> = ({
   children,
-  onClick,
   variant = 'primary',
   size = 'md',
-  disabled = false,
+  isLoading = false,
+  leftIcon,
+  rightIcon,
   fullWidth = false,
-  className = '',
+  disabled,
+  className,
+  ...props
 }) => {
-  // TODO: Implement proper styling with Tailwind
-  const baseClasses = 'rounded font-semibold transition-colors';
-  const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    secondary: 'bg-gray-600 hover:bg-gray-700 text-white',
-    danger: 'bg-red-600 hover:bg-red-700 text-white',
-    ghost: 'bg-transparent hover:bg-gray-700 text-gray-300',
-  };
-  const sizeClasses = {
-    sm: 'px-3 py-1 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  };
+  const isDisabled = disabled || isLoading;
 
   return (
     <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`
-        ${baseClasses}
-        ${variantClasses[variant]}
-        ${sizeClasses[size]}
-        ${fullWidth ? 'w-full' : ''}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-        ${className}
-      `}
+      className={clsx(
+        'inline-flex items-center justify-center gap-2 rounded transition-colors duration-200',
+        'focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-space-900',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        variantStyles[variant],
+        sizeStyles[size],
+        fullWidth && 'w-full',
+        className
+      )}
+      disabled={isDisabled}
+      {...props}
     >
-      {children}
+      {isLoading ? (
+        <LoadingDots />
+      ) : (
+        <>
+          {leftIcon && <span className="flex-shrink-0">{leftIcon}</span>}
+          {children}
+          {rightIcon && <span className="flex-shrink-0">{rightIcon}</span>}
+        </>
+      )}
     </button>
   );
 };
+
+// Internal loading animation
+const LoadingDots: React.FC = () => (
+  <span className="flex gap-1">
+    <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+    <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+    <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+  </span>
+);
+
+export default Button;

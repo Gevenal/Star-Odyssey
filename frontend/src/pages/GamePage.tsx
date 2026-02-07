@@ -15,16 +15,15 @@ interface GamePageProps {
 }
 
 export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
-  const { gameState, isLoading, sessionId, addNarration, setGameState } =
-    useGameStore();
-  const { submitActionStreaming } = useGameActions();
+  const { gameState, isLoading, sessionId, error, setError } = useGameStore();
+  const { submitActionStreaming, endTurn } = useGameActions();
   const [availableActions, setAvailableActions] = useState<ActionDefinition[]>(
     [],
   );
   const [loadingActions, setLoadingActions] = useState(false);
   const navigate = useNavigate();
 
-  // 获取当前可用的 actions（基于 RulesEngine 过滤）
+  // Fetch currently available actions (filtered by RulesEngine)
   const fetchAvailableActions = async () => {
     if (!sessionId) return;
     setLoadingActions(true);
@@ -38,13 +37,15 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
     }
   };
 
-  // 游戏开始时和状态变化时获取可用 actions
+  // Fetch available actions when game starts and state changes
   useEffect(() => {
     fetchAvailableActions();
   }, [sessionId, gameState?.world?.turn]);
 
-  // 处理选择预定义的 action
+  // Handle predefined action selection
   const handleActionSelect = (action: ActionDefinition) => {
+    // Clear previous errors
+    setError(null);
     submitActionStreaming({
       actionType: action.category,
       actionId: action.actionId,
@@ -52,40 +53,22 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
     });
   };
 
-  // 结束回合
-  const isGameOverFromState = (state: any) => {
-    return (
-      state?.world?.game_meta?.game_phase === "ending" ||
-      state?.gameOver === true
-    );
+  // Handle freeform action input
+  const handleFreeformAction = (actionText: string) => {
+    setError(null);
+    submitActionStreaming({
+      actionType: 'freeform',
+      actionId: 'freeform',
+      actionText,
+    });
   };
 
+  // Handle end turn
   const handleEndTurn = async () => {
-    if (!sessionId) return;
-
-    try {
-      const response = await gameApi.endTurn(sessionId);
-
-      addNarration("narrator", response.turnSummary || "Time passes...");
-      if (response.events?.length) {
-        response.events.forEach((event: string) =>
-          addNarration("event", event),
-        );
-      }
-
-      const newState = await gameApi.getGameState(sessionId);
-      setGameState(newState);
-
-      if (isGameOverFromState(newState)) {
-        navigate(`/ending/${sessionId}`);
-        return;
-      }
-
-      // 如果希望确保 actions 立刻更新（不依赖 turn 是否变化），保留这句
-      fetchAvailableActions();
-    } catch (err) {
-      console.error("Failed to end turn:", err);
-    }
+    setError(null);
+    await endTurn();
+    // Refresh available actions
+    fetchAvailableActions();
   };
 
   if (!gameState) {
@@ -96,7 +79,7 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
     );
   }
 
-  // 按类别分组 actions
+  // Group actions by category
   const actionsByCategory = availableActions.reduce(
     (acc, action) => {
       const cat = action.category || "Other";
@@ -117,9 +100,31 @@ export const GamePage: React.FC<GamePageProps> = ({ onExit }) => {
       }
     >
       <div className="h-full flex flex-col gap-4">
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-red-400 text-sm">{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-300 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Narration */}
         <div className="flex-1 overflow-hidden">
           <NarrationPanel />
+        </div>
+
+        {/* Action Input (Freeform) */}
+        <div className="bg-gray-900 rounded-lg p-4">
+          <ActionInput
+            onSubmit={handleFreeformAction}
+            disabled={isLoading}
+            placeholder="Type your action..."
+          />
         </div>
 
         {/* Available Actions */}

@@ -88,6 +88,10 @@ export interface GameState {
   world: WorldState;
   turnCount: number;
   oracleSentienceLevel: number;
+  /** Recent turn history (backend may omit or truncate) */
+  history?: Record<string, unknown>[];
+  /** Set when game has ended */
+  endingTriggered?: string | null;
 }
 
 // Actions & Responses
