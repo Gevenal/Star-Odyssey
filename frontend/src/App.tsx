@@ -8,11 +8,46 @@ import {
 } from "react-router-dom";
 import { HomePage } from "@/pages/HomePage";
 import { GamePage } from "@/pages/GamePage";
-import { useGameStore } from "@/stores/gameStore";
+import { useGameStore, getNarrationFromStorage } from "@/stores/gameStore";
 import { gameApi } from "@/api/gameApi";
 import { EndingPage } from "./pages/EndingPage";
 
 const LAST_SESSION_KEY = "star_odyssey:last_session_id";
+
+type NarrationEntry = {
+  type: "player" | "narrator" | "oracle" | "event";
+  content: string;
+  timestamp: number;
+};
+
+function buildNarrationFromHistory(
+  history: Record<string, unknown>[] | undefined
+): NarrationEntry[] {
+  if (!history?.length) {
+    return [
+      {
+        type: "event",
+        content: "Session restored. Your journey continues.",
+        timestamp: Date.now(),
+      },
+    ];
+  }
+  const baseTime = Date.now() - history.length * 60000;
+  return history.map((entry, i) => {
+    const content =
+      (entry.narration as string) ||
+      (entry.narration_text as string) ||
+      (entry.event as string) ||
+      (entry.action_text as string) ||
+      (typeof entry.action === "string" ? entry.action : null) ||
+      "Something happened.";
+    return {
+      type: (entry.type as NarrationEntry["type"]) || "narrator",
+      content: String(content),
+      timestamp: baseTime + i * 60000,
+    };
+  });
+}
 
 function HomeRoute() {
   const navigate = useNavigate();
@@ -102,7 +137,8 @@ function GameRoute() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
 
-  const { setSession, gameState, setGameState } = useGameStore();
+  const { setSession, gameState, setGameState, setNarrationHistory, reset } =
+    useGameStore();
   const [hydrating, setHydrating] = useState(false);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
 
@@ -121,6 +157,13 @@ function GameRoute() {
         .getGameState(sessionId)
         .then((state) => {
           setGameState(state);
+          // Restore narration from localStorage (persisted on each addNarration)
+          const stored = getNarrationFromStorage(sessionId);
+          const entries =
+            stored.length > 0
+              ? stored
+              : buildNarrationFromHistory(state.history);
+          setNarrationHistory(entries);
         })
         .catch((err) => {
           console.error("Failed to hydrate game state:", err);
@@ -159,7 +202,7 @@ function GameRoute() {
   }
 
   const handleBackToHome = () => {
-    useGameStore.getState().reset();
+    reset();
     navigate("/");
   };
 

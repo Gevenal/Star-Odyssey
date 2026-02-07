@@ -1,7 +1,32 @@
 import { create } from 'zustand';
 import { GameState, GameActionResponse, StateChange, NPCReaction } from '@/types/game';
 
-interface NarrationEntry {
+const NARRATION_STORAGE_PREFIX = 'star_odyssey:narration:';
+
+export function getNarrationStorageKey(sessionId: string): string {
+  return NARRATION_STORAGE_PREFIX + sessionId;
+}
+
+export function getNarrationFromStorage(sessionId: string): NarrationEntry[] {
+  try {
+    const raw = localStorage.getItem(getNarrationStorageKey(sessionId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is NarrationEntry =>
+        e != null &&
+        typeof e === 'object' &&
+        ['player', 'narrator', 'oracle', 'event'].includes((e as NarrationEntry).type) &&
+        typeof (e as NarrationEntry).content === 'string' &&
+        typeof (e as NarrationEntry).timestamp === 'number'
+    );
+  } catch {
+    return [];
+  }
+}
+
+export interface NarrationEntry {
   type: 'player' | 'narrator' | 'oracle' | 'event';
   content: string;
   timestamp: number;
@@ -24,6 +49,7 @@ interface GameStore {
   updateGameState: (partial: Partial<GameState>) => void;
   applyActionResponse: (response: GameActionResponse) => void;
   addNarration: (type: NarrationEntry['type'], content: string) => void;
+  setNarrationHistory: (entries: NarrationEntry[]) => void;
   setLoading: (loading: boolean) => void;
   setStreaming: (streaming: boolean) => void;
   appendStreamContent: (content: string) => void;
@@ -94,12 +120,26 @@ export const useGameStore = create<GameStore>((set) => ({
     }),
 
   addNarration: (type: NarrationEntry['type'], content: string) =>
-    set((state: GameStore) => ({
-      narrationHistory: [
+    set((state: GameStore) => {
+      const entries = [
         ...state.narrationHistory,
         { type, content, timestamp: Date.now() },
-      ],
-    })),
+      ];
+      if (state.sessionId) {
+        try {
+          localStorage.setItem(
+            getNarrationStorageKey(state.sessionId),
+            JSON.stringify(entries)
+          );
+        } catch {
+          // ignore quota or other storage errors
+        }
+      }
+      return { narrationHistory: entries };
+    }),
+
+  setNarrationHistory: (entries: NarrationEntry[]) =>
+    set({ narrationHistory: entries }),
 
   setLoading: (loading: boolean) => set({ isLoading: loading }),
 
@@ -117,15 +157,24 @@ export const useGameStore = create<GameStore>((set) => ({
   setError: (error: string | null) => set({ error }),
 
   reset: () =>
-    set({
-      sessionId: null,
-      gameState: null,
-      narrationHistory: [],
-      isLoading: false,
-      isStreaming: false,
-      streamingContent: '',
-      availableActions: [],
-      error: null,
+    set((state: GameStore) => {
+      if (state.sessionId) {
+        try {
+          localStorage.removeItem(getNarrationStorageKey(state.sessionId));
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        sessionId: null,
+        gameState: null,
+        narrationHistory: [],
+        isLoading: false,
+        isStreaming: false,
+        streamingContent: '',
+        availableActions: [],
+        error: null,
+      };
     }),
 }));
 
