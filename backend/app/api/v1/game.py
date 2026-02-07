@@ -592,6 +592,27 @@ async def get_ending(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"StateConverter failed: {type(e).__name__}: {e}")
 
+    # Use stored ending from gameState when game has ended and ending was already generated
+    if game_state.is_game_over() and game_state.ending and isinstance(game_state.ending, dict):
+        stored = game_state.ending
+        metrics = stored.get("statistics", {})
+        stats = EndingStatistics(
+            days_survived=metrics.get("days_survived", game_state.world.day),
+            crew_survived=metrics.get("survivors", game_state.count_alive_npcs()),
+            secrets_discovered=metrics.get("secrets_found", len(game_state.player.discovered_secrets)),
+            player_alive=metrics.get("player_alive", game_state.player.health > 0),
+            crew_morale=metrics.get("avg_morale", game_state.world.crew_morale),
+            oracle_sentience=metrics.get("oracle_sentience", game_state.oracle_sentience_level),
+        )
+        return EndingResponse(
+            ending_type=stored.get("ending_type", "mixed"),
+            title=stored.get("title", "The End"),
+            narration=(stored.get("narration") or "").strip(),
+            survivor_fates=stored.get("survivor_fates", {}),
+            epilogue=stored.get("epilogue", ""),
+            statistics=stats,
+        )
+
     generator = EndingGenerator(gemini_client)
     try:
         ending = await generator.generate_ending(game_state)

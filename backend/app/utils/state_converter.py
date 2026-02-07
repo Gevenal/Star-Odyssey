@@ -58,12 +58,20 @@ class StateConverter:
 
         game_meta = state_dict.get("game_meta", {}) if isinstance(state_dict, dict) else {}
 
+        # Ending: prefer game_meta.ending (set by game_loop), fallback top-level state.ending
         ending_payload = None
         if isinstance(game_meta, dict) and isinstance(game_meta.get("ending"), dict):
             ending_payload = game_meta["ending"]
         elif isinstance(state_dict, dict) and isinstance(state_dict.get("ending"), dict):
             # fallback in case ending stored at top-level
             ending_payload = state_dict["ending"]
+
+        # ending_triggered: game_loop uses "ending_triggered"; some code (e.g. save list) uses "ending_id"
+        ending_triggered_val = None
+        if isinstance(game_meta, dict):
+            ending_triggered_val = game_meta.get("ending_triggered") or game_meta.get("ending_id")
+        if ending_triggered_val is not None and not isinstance(ending_triggered_val, str):
+            ending_triggered_val = str(ending_triggered_val)
 
         return GameState(
             session_id=session_id,
@@ -75,7 +83,7 @@ class StateConverter:
             turn_count=max(1, game_meta.get("current_turn", 0)),
             history=snapshot.get("turn_history", []) if isinstance(snapshot, dict) else [],
             oracle_sentience_level=state_dict.get("oracle_sentience_level", 1) if isinstance(state_dict, dict) else 1,
-            ending_triggered=game_meta.get("ending_triggered"),
+            ending_triggered=ending_triggered_val,
             ending=ending_payload,
         )
 
