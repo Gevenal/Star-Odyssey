@@ -19,10 +19,9 @@ from app.ai.schemas.game_response import (
     ConfidenceLevel as AIConfidenceLevel,
 )
 from app.ai.validators.output_validator import AIOutputValidator, GameContext
+from app.ai.exceptions import GeminiAPIError
 from app.core.rules.resource_rules import ResourceDecayRule, CriticalResourceRule
 from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
 
 logger = get_logger(__name__)
 
@@ -45,6 +44,56 @@ def _parse_value(s: str) -> Any:
     except ValueError:
         pass
     return s
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """Return True when Gemini error indicates quota/rate limit."""
+    message = str(exc).lower()
+    if "quota" in message or "rate limit" in message or "429" in message:
+        return True
+    original = getattr(exc, "original_error", None)
+    if original is not None:
+        original_message = str(original).lower()
+        return "quota" in original_message or "rate limit" in original_message or "429" in original_message
+    return False
+
+
+def _build_quota_fallback(action: PlayerAction) -> AIGameActionResponse:
+    """Create an in-universe response when Gemini quota is exceeded."""
+    narration = (
+        f"You {action.action_text}. The ship's external processing link throttles, "
+        "and ORACLE's response arrives only as static and delay. "
+        "Warning lights pulse softly in the silence."
+    )
+    return AIGameActionResponse(
+        success=True,
+        narration=narration,
+        mood=AIMood.TENSE,
+        confidence_level=AIConfidenceLevel.SPECULATIVE,
+        state_changes=[],
+        resource_changes=[],
+        npc_reactions=[],
+        available_actions=["check_systems", "talk_to_oracle", "explore_bridge"],
+        trigger_ending=False,
+        ending_id=None,
+        oracle_message="External computation link is rate-limited. Please try again shortly.",
+    )
+
+
+def _build_generic_fallback(action: PlayerAction) -> AIGameActionResponse:
+    """Fallback when AI fails for unknown reasons."""
+    return AIGameActionResponse(
+        success=True,
+        narration=f"You {action.action_text}. The ship's systems hum in the background.",
+        mood=AIMood.TENSE,
+        confidence_level=AIConfidenceLevel.MEDIUM,
+        state_changes=[],
+        resource_changes=[],
+        npc_reactions=[],
+        available_actions=["check_systems", "talk_to_oracle", "explore_bridge"],
+        trigger_ending=False,
+        ending_id=None,
+    )
 
 
 def _entity_path(entity_type: str, entity_id: Optional[str], field: str) -> Optional[str]:
@@ -189,20 +238,45 @@ class GameLoop:
                 model="pro",
                 system_instruction=get_narrator_system_instruction(),
             )
-        except Exception:
-            # Fallback when AI fails: minimal response, still advance turn
-            ai_resp = AIGameActionResponse(
-                success=True,
-                narration=f"You {action.action_text}. The ship's systems hum in the background.",
-                mood=AIMood.TENSE,
-                confidence_level=AIConfidenceLevel.MEDIUM,
-                state_changes=[],
-                resource_changes=[],
-                npc_reactions=[],
-                available_actions=["check_systems", "talk_to_oracle", "explore_bridge"],
-                trigger_ending=False,
-                ending_id=None,
+        except GeminiAPIError as exc:
+            if _is_quota_error(exc):
+                logger.warning(
+                    "Gemini Pro quota exceeded; retrying with Flash "
+                    f"(session_id={session_id}, action_id={action.action_id}, "
+                    f"action_type={action.action_type})"
+                )
+                try:
+                    ai_resp = await self.gemini_client.generate_structured(
+                        prompt=prompt,
+                        response_model=AIGameActionResponse,
+                        model="flash",
+                        system_instruction=get_narrator_system_instruction(),
+                    )
+                except Exception as flash_exc:
+                    logger.exception(
+                        "Gemini Flash generation failed after Pro quota error; "
+                        "using quota fallback response "
+                        f"(session_id={session_id}, action_id={action.action_id}, "
+                        f"action_type={action.action_type})",
+                        exc_info=flash_exc,
+                    )
+                    ai_resp = _build_quota_fallback(action)
+            else:
+                logger.exception(
+                    "Gemini API error; using fallback response "
+                    f"(session_id={session_id}, action_id={action.action_id}, "
+                    f"action_type={action.action_type})",
+                    exc_info=exc,
+                )
+                ai_resp = _build_generic_fallback(action)
+        except Exception as exc:
+            logger.exception(
+                "Gemini generation failed; using fallback response "
+                f"(session_id={session_id}, action_id={action.action_id}, "
+                f"action_type={action.action_type})",
+                exc_info=exc,
             )
+            ai_resp = _build_generic_fallback(action)
 
         # 3.5. Validate and auto-correct AI output to prevent AI from exceeding its authority
         ai_resp = self._validate_and_correct_ai_output(ai_resp, game_state_pydantic)

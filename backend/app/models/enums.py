@@ -29,6 +29,7 @@ class ActionCategory(str, Enum):
     RESOURCE_MANAGEMENT = "resource_management"
     SOCIAL_INTERACTION = "social_interaction"
     INVESTIGATION = "investigation"
+    MOVEMENT = "movement"
     CRITICAL_DECISION = "critical_decision"
     REST_RECOVERY = "rest_recovery"
     FREEFORM = "freeform"
