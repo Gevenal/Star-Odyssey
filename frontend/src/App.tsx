@@ -170,14 +170,15 @@ function EndingRoute() {
     setError(null);
 
     gameApi
-      .getGameState(sessionId)
-      .then((state) => {
-        // TODO: replace with real fields once defined
-        setEndingTitle((state as any)?.ending?.title ?? "The End");
-        setEndingNarration(
-          (state as any)?.ending?.narration ?? "(No ending text)",
-        );
-        setStatistics((state as any)?.ending?.statistics ?? null);
+      .getEnding(sessionId)
+      .then((ending) => {
+        setEndingTitle(ending.title || "The End");
+        setEndingNarration(ending.narration || "(No ending text)");
+        setStatistics({
+          daysServived: ending.statistics.daysSurvived,
+          crewSurvived: ending.statistics.crewSurvived,
+          secretsDiscovered: ending.statistics.secretsDiscovered,
+        });
       })
       .catch((e) => {
         console.error(e);

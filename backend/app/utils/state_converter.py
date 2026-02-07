@@ -216,6 +216,8 @@ class StateConverter:
         day = int(world_dict.get("day", 1)) if isinstance(world_dict, dict) else 1
         time_of_day = world_dict.get("time_of_day", "00:00") if isinstance(world_dict, dict) else "00:00"
         turn = int(world_dict.get("turn", 1)) if isinstance(world_dict, dict) else 1
+        day = max(1, min(3, day))
+        turn = max(1, min(12, turn))
 
         return WorldState(
             day=day,

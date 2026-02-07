@@ -8,6 +8,8 @@ from app.api.schemas import (
     GameStartResponse,
     AvailableActionsResponse,
     TurnEndResponse,
+    EndingResponse,
+    EndingStatistics,
     NPCTalkRequest,
     NPCTalkResponse,
     NPCInterrogationRequest,
@@ -47,6 +49,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.game_state_manager import GameStateManager
+from app.core.ending_generator import EndingGenerator
 
 router = APIRouter()
 
@@ -561,6 +564,83 @@ async def end_turn(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to advance turn: {str(e)}"
+        )
+
+
+@router.get(
+    "/ending/{session_id}",
+    response_model=EndingResponse,
+    summary="Get ending narration",
+    description="Generate the ending narration and summary based on the final game state."
+)
+async def get_ending(
+    session_id: str,
+    session_mgr: SessionStateManager = Depends(get_session_manager),
+    gemini_client=Depends(get_gemini_client)
+) -> EndingResponse:
+    """
+    Generate ending text for the final state.
+
+    Returns:
+        EndingResponse with title, narration, epilogue, and statistics
+    """
+    try:
+        state_data = await session_mgr.get_state(session_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    try:
+        game_state = StateConverter.snapshot_to_game_state(state_data, session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"StateConverter failed: {type(e).__name__}: {e}")
+
+    generator = EndingGenerator(gemini_client)
+    try:
+        ending = await generator.generate_ending(game_state)
+        metrics = ending.get("statistics", {})
+        stats = EndingStatistics(
+            days_survived=metrics.get("days_survived", game_state.world.day),
+            crew_survived=metrics.get("survivors", game_state.count_alive_npcs()),
+            secrets_discovered=metrics.get("secrets_found", len(game_state.player.discovered_secrets)),
+            player_alive=metrics.get("player_alive", game_state.player.health > 0),
+            crew_morale=metrics.get("avg_morale", game_state.world.crew_morale),
+            oracle_sentience=metrics.get("oracle_sentience", game_state.oracle_sentience_level),
+        )
+        return EndingResponse(
+            ending_type=ending.get("ending_type", "mixed"),
+            title=ending.get("title", "The End"),
+            narration=ending.get("narration", "").strip(),
+            survivor_fates=ending.get("survivor_fates", {}),
+            epilogue=ending.get("epilogue", ""),
+            statistics=stats,
+        )
+    except Exception as e:
+        logger.exception(f"Ending generation failed: {e}")
+        metrics = generator._analyze_final_state(game_state)
+        ending_type = generator._determine_ending_type(metrics)
+        title = generator._generate_title(ending_type, metrics)
+        epilogue = generator._generate_epilogue(game_state, metrics, ending_type)
+        narration = (
+            f"After {metrics['days_survived']} days adrift, the crew's story reached its end. "
+            f"{'You survived' if metrics['player_alive'] else 'You did not survive'}, "
+            f"and {metrics['survivors']} crew members remained. "
+            "The Odyssey-7 drifted on, marked forever by the choices made in the void."
+        )
+        stats = EndingStatistics(
+            days_survived=metrics["days_survived"],
+            crew_survived=metrics["survivors"],
+            secrets_discovered=metrics["secrets_found"],
+            player_alive=metrics["player_alive"],
+            crew_morale=metrics["avg_morale"],
+            oracle_sentience=metrics["oracle_sentience"],
+        )
+        return EndingResponse(
+            ending_type=ending_type,
+            title=title,
+            narration=narration,
+            survivor_fates={},
+            epilogue=epilogue,
+            statistics=stats,
         )
 
 

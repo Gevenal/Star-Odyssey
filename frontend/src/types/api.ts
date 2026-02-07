@@ -120,9 +120,30 @@ export interface AvailableActionsResponse {
 }
 
 export interface TurnEndResponse {
-  gameState: GameState;
-  turnSummary: string;
-  events: string[];
+  eventsOccurred: string[];
+  npcActionsTaken: string[];
+  stateSummary: Record<string, unknown>;
+  narration: string;
+  criticalAlerts: string[];
+  turnNumber: number;
+}
+
+export interface EndingStatistics {
+  daysSurvived: number;
+  crewSurvived: number;
+  secretsDiscovered: number;
+  playerAlive: boolean;
+  crewMorale: number;
+  oracleSentience: number;
+}
+
+export interface EndingResponse {
+  endingType: string;
+  title: string;
+  narration: string;
+  survivorFates: Record<string, string>;
+  epilogue: string;
+  statistics: EndingStatistics;
 }
 
 export interface SaveGameResponse {

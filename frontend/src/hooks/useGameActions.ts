@@ -212,17 +212,14 @@ export const useGameActions = () => {
     try {
       const response = await gameApi.endTurn(sessionId);
 
-      // Update game state
-      setGameState(response.gameState);
-
-      // Add turn summary
-      if (response.turnSummary) {
-        addNarration('event', response.turnSummary);
+      // Add turn narration
+      if (response.narration) {
+        addNarration('event', response.narration);
       }
 
       // Add events
-      if (response.events && response.events.length > 0) {
-        response.events.forEach((event) => {
+      if (response.eventsOccurred && response.eventsOccurred.length > 0) {
+        response.eventsOccurred.forEach((event) => {
           addNarration('event', event);
         });
       } else {
@@ -230,11 +227,12 @@ export const useGameActions = () => {
         addNarration('event', 'Time passes...');
       }
 
+      // Refresh game state after turn ends
+      const updatedState = await gameApi.getGameState(sessionId);
+      setGameState(updatedState);
+
       // Check if game is over
-      if (
-        response.gameState?.phase === 'ending' ||
-        response.gameState?.world?.game_meta?.game_phase === 'ending'
-      ) {
+      if (updatedState?.phase === 'ending') {
         navigate(`/ending/${sessionId}`);
         return;
       }
