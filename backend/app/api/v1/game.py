@@ -34,7 +34,7 @@ from app.api.schemas import (
     ListSuspiciousNPCsResponse,
     GetNPCSkillsResponse,
 )
-from app.models.action import ActionDefinition, PlayerAction
+from app.models.action import ActionDefinition, PlayerAction, parse_allowed_locations
 from app.models.response import GameActionResponse
 from app.models.game_state import GameState
 from app.core.session_state_manager import SessionStateManager
@@ -399,12 +399,10 @@ async def get_available_actions(
         unavailable_reasons = {}
         
         for action_def in all_actions:
-            req_loc = action_def.requirements.location
-            if req_loc:
-                allowed_locations = [loc.strip() for loc in req_loc.split(",")]
-                if player_loc not in allowed_locations:
-                    unavailable_reasons[action_def.id] = f"Requires location: {req_loc}"
-                    continue
+            allowed_locations = parse_allowed_locations(action_def.requirements.location)
+            if allowed_locations and player_loc not in allowed_locations:
+                unavailable_reasons[action_def.id] = f"Requires location: {action_def.requirements.location}"
+                continue
             available_actions.append(action_def)
     
     # 5) Fallback: if no actions available, provide basics

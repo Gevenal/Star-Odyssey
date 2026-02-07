@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional
 
 from app.core.rules.base_rule import BaseRule, RuleResult
-from app.models.action import PlayerAction, ActionDefinition, ActionRequirement
+from app.models.action import PlayerAction, ActionDefinition, ActionRequirement, parse_allowed_locations
 from app.models.game_state import GameState
 
 
@@ -128,13 +128,10 @@ class RulesEngine:
         world = game_state.world
         resources = world.resources
         
-        # 1. Location requirement
-        if req.location and req.location != "":
-            player_loc = player.location
-            # Support comma-separated locations or exact match
-            allowed_locations = [loc.strip() for loc in req.location.split(",")]
-            if player_loc not in allowed_locations:
-                return False, f"Requires location: {req.location}"
+        # 1. Location requirement (comma-separated = any of)
+        allowed_locations = parse_allowed_locations(req.location)
+        if allowed_locations and player.location not in allowed_locations:
+            return False, f"Requires location: {req.location}"
         
         # 2. Minimum resource levels
         for resource_name, min_val in (req.min_resource_levels or {}).items():
