@@ -663,7 +663,7 @@ class GameLoop:
         if isinstance(health, (int, float)) and health <= 0:
             return True, "ending_death"
         turn = gs.get("game_meta.current_turn", 0) or 0
-        if turn >= 84:  # 7 days * 12 turns
+        if turn >= 36:  # 3 days * 12 turns
             return True, "ending_rescue"
         return False, None
 
@@ -752,7 +752,7 @@ class GameLoop:
 
         # Allow death in late game
         current_day = getattr(game_state.world, 'day', 1) or 1
-        if current_day >= 5:
+        if current_day >= 3:
             return True
 
         # Check for story events that enable death

@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Day Counter */}
               <div className="flex flex-col items-center">
                 <span className="text-gray-500 text-xs uppercase">Day</span>
-                <span className="text-white font-bold text-lg">{world?.day || 1}/7</span>
+                <span className="text-white font-bold text-lg">{world?.day || 1}/3</span>
               </div>
 
               {/* Turn Counter */}

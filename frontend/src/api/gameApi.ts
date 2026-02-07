@@ -4,6 +4,7 @@ import {
   ActionDefinition,
   AvailableActionsResponse,
   TurnEndResponse,
+  EndingResponse,
   SaveGameResponse,
   LoadGameResponse,
 } from '@/types/api';
@@ -163,6 +164,15 @@ export const gameApi = {
     apiRequest<TurnEndResponse>({
       method: 'POST',
       url: `/game/end-turn/${sessionId}`,
+    }),
+
+  /**
+   * Get ending narration and summary.
+   */
+  getEnding: (sessionId: string): Promise<EndingResponse> =>
+    apiRequest<EndingResponse>({
+      method: 'GET',
+      url: `/game/ending/${sessionId}`,
     }),
 
   /**

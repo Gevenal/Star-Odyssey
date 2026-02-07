@@ -13,8 +13,8 @@ class WorldState(CamelCaseModel):
     day: int = Field(
         default=1,
         ge=1,
-        le=7,
-        description="Current day (1-7)"
+        le=3,
+        description="Current day (1-3)"
     )
     turn: int = Field(
         default=1,
@@ -83,7 +83,7 @@ class WorldState(CamelCaseModel):
     @classmethod
     def validate_day(cls, v):
         """Ensure day stays in valid range."""
-        return max(1, min(7, v))
+        return max(1, min(3, v))
 
     @field_validator("turn")
     @classmethod

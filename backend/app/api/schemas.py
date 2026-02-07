@@ -282,6 +282,31 @@ class LoadGameResponse(CamelCaseModel):
     )
 
 
+class EndingStatistics(CamelCaseModel):
+    """Summary metrics for the ending screen."""
+
+    days_survived: int = Field(..., description="Number of days survived")
+    crew_survived: int = Field(..., description="Number of crew members alive")
+    secrets_discovered: int = Field(..., description="Number of secrets discovered")
+    player_alive: bool = Field(..., description="Whether the player survived")
+    crew_morale: int = Field(..., description="Final crew morale")
+    oracle_sentience: int = Field(..., description="ORACLE sentience level")
+
+
+class EndingResponse(CamelCaseModel):
+    """Response for the ending screen."""
+
+    ending_type: str = Field(..., description="Ending category (victory/defeat/mixed)")
+    title: str = Field(..., description="Ending title")
+    narration: str = Field(..., description="Ending narration")
+    survivor_fates: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Per-NPC fates (npc_id -> text)"
+    )
+    epilogue: str = Field(..., description="Short epilogue line")
+    statistics: EndingStatistics = Field(..., description="Summary metrics")
+
+
 class DebugStateResponse(BaseModel):
     """Debug response with full state dump."""
 

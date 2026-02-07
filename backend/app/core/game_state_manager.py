@@ -525,12 +525,17 @@ class GameStateManager:
         hours = current_turn * 2  # 2 hours per turn
         day = (hours // 24) + 1
         hour = hours % 24
+        turn_in_day = (hour // 2) + 1
+        max_days = 3
+        if day > max_days:
+            day = max_days
         
         self.set("game_meta.current_day", day, validate=False)
         self.set("game_meta.current_hour", hour, validate=False)
         self.set("world.day", day, validate=False)
         self.set("world.time_of_day", f"{hour:02d}:00", validate=False)
-        self.set("world.turn", current_turn + 1, validate=False)  # Start from 1, so +1
+        # Keep world.turn within 1-12 for the current day
+        self.set("world.turn", turn_in_day, validate=False)
 
 # ===== Usage Example =====
 if __name__ == "__main__":
