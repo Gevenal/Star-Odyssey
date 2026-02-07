@@ -5,6 +5,17 @@ from pydantic import BaseModel, Field, ConfigDict
 from app.models.enums import ActionCategory
 
 
+def parse_allowed_locations(location: Optional[str]) -> List[str]:
+    """
+    Parse location requirement string into list of allowed location IDs.
+    Convention: comma-separated = player may be at ANY of these locations.
+    E.g. "mess_hall,command_bridge" -> ["mess_hall", "command_bridge"].
+    """
+    if not location or not location.strip():
+        return []
+    return [loc.strip() for loc in location.split(",")]
+
+
 def to_camel(string: str) -> str:
     """Convert snake_case to camelCase."""
     components = string.split('_')
@@ -74,7 +85,7 @@ class ActionRequirement(BaseModel):
 
     location: Optional[str] = Field(
         default=None,
-        description="Required location ID (None = any location)"
+        description="Required location(s): single ID or comma-separated (any of). E.g. 'mess_hall,command_bridge'."
     )
     items: List[str] = Field(
         default_factory=list,
