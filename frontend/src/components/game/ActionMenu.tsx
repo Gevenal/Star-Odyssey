@@ -62,6 +62,11 @@ const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
     color: 'text-purple-400',
     bgColor: 'bg-purple-500/10 hover:bg-purple-500/20',
   },
+  movement: {
+    icon: <ChevronRight size={14} />,
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/10 hover:bg-sky-500/20',
+  },
   critical_decision: {
     icon: <Zap size={14} />,
     color: 'text-cyan-400',
@@ -71,6 +76,11 @@ const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
     icon: <Coffee size={14} />,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/10 hover:bg-blue-500/20',
+  },
+  freeform: {
+    icon: <ChevronRight size={14} />,
+    color: 'text-gray-300',
+    bgColor: 'bg-gray-500/10 hover:bg-gray-500/20',
   },
 };
 

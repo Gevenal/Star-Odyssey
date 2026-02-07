@@ -61,7 +61,7 @@ def build_narrator_prompt(
     ctx = context or {}
     state_str = format_game_context(game_state, turn_history=ctx.get("turn_history"))
 
-    prompt = f"""You are the narrator for the space survival game Odyssey-7. Given the current state and the player's action, respond with a JSON object that includes: success, narration, mood, state_changes, resource_changes, npc_reactions, available_actions, trigger_ending, ending_id, oracle_message, confidence_level.
+    prompt = f"""You are the narrator for the space survival game star-Odyssey. Given the current state and the player's action, respond with a JSON object that includes: success, narration, mood, state_changes, resource_changes, npc_reactions, available_actions, trigger_ending, ending_id, oracle_message, confidence_level.
 
 CURRENT STATE:
 {state_str}
