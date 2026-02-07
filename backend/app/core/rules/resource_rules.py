@@ -4,7 +4,7 @@ from typing import Optional
 
 from app.core.rules.base_rule import BaseRule, RuleResult
 from app.models.game_state import GameState
-from app.models.action import PlayerAction
+from app.models.action import PlayerAction, parse_allowed_locations
 
 
 class ResourceAvailabilityRule(BaseRule):
@@ -40,14 +40,14 @@ class ResourceAvailabilityRule(BaseRule):
         resources = game_state.world.resources
         player = game_state.player
 
-        # location: must be at required location
-        if req.location is not None and req.location != "":
-            if player.location != req.location:
-                return RuleResult(
-                    valid=False,
-                    error=f"Action requires location '{req.location}', you are at '{player.location}'",
-                    suggestion=f"Go to {req.location} first",
-                )
+        # location: must be at one of the required locations (comma-separated = any of)
+        allowed_locations = parse_allowed_locations(req.location)
+        if allowed_locations and player.location not in allowed_locations:
+            return RuleResult(
+                valid=False,
+                error=f"Action requires location '{req.location}', you are at '{player.location}'",
+                suggestion=f"Go to one of: {', '.join(allowed_locations)}",
+            )
 
         # min_resource_levels: each resource must be >= min
         for name, min_val in (req.min_resource_levels or {}).items():

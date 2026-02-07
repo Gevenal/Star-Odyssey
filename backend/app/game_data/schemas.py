@@ -123,7 +123,10 @@ class StateVariablesConfig(BaseModel):
 class ActionRequirementConfig(BaseModel):
     """Action requirement configuration."""
 
-    location: Optional[str] = Field(None, description="Required location")
+    location: Optional[str] = Field(
+        None,
+        description="Required location(s): one ID or comma-separated for any-of (e.g. 'mess_hall,command_bridge')",
+    )
     items: List[str] = Field(default_factory=list, description="Required items")
     min_resource_levels: Dict[str, float] = Field(
         default_factory=dict,
