@@ -1,11 +1,12 @@
 import React from 'react';
 import clsx from 'clsx';
 import {
-  Droplet,       // Oxygen
-  Zap,        // Power
-  Heart,      // Medical
-  Apple,   // Food
-  Wrench,     // Repair
+  Droplet, // Oxygen
+  Zap, // Power
+  Heart, // Medical
+  Wrench, // Repair
+  Activity, // Fuel
+  Filter, // Food & Water
   AlertTriangle,
 } from 'lucide-react';
 import { ResourceLevels, ResourceLevel } from '@/types/game';
@@ -26,11 +27,11 @@ interface ResourceConfig {
 }
 
 const RESOURCE_CONFIG: ResourceConfig[] = [
-  { key: 'oxygenLevel', label: 'Oxygen', icon: <Wind size={16} />, color: 'cyan' },
+  { key: 'oxygenLevel', label: 'Oxygen', icon: <Droplet size={16} />, color: 'cyan' },
   { key: 'powerLevel', label: 'Power', icon: <Zap size={16} />, color: 'yellow' },
-  { key: 'fuelReserves', label: 'Fuel', icon: <Fuel size={16} />, color: 'purple' },
+  { key: 'fuelReserves', label: 'Fuel', icon: <Activity size={16} />, color: 'purple' },
   { key: 'medicalSupplies', label: 'Medical', icon: <Heart size={16} />, color: 'red' },
-  { key: 'foodWater', label: 'Food & Water', icon: <Utensils size={16} />, color: 'green' },
+  { key: 'foodWater', label: 'Food & Water', icon: <Filter size={16} />, color: 'green' },
   { key: 'repairMaterials', label: 'Repair Parts', icon: <Wrench size={16} />, color: 'cyan' },
 ];
 
