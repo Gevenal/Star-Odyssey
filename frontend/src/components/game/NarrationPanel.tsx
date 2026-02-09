@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { clsx } from 'clsx';
+import clsx from 'clsx';
 import { BookOpen, User, Cpu, AlertCircle } from 'lucide-react';
 import { useGameStore } from '@/stores/gameStore';
 

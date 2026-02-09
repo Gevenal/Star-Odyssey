@@ -1,5 +1,5 @@
 import React from 'react';
-import { clsx } from 'clsx';
+import clsx from 'clsx';
 import { Heart, Brain, MapPin, Activity, Skull } from 'lucide-react';
 import { NPCState } from '@/types/game';
 import ProgressBar from '@/components/common/ProgressBar';
