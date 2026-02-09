@@ -6,8 +6,8 @@ import {
   Users,
   Search,
   Zap,
-  Coffee,
-  ChevronRight,
+  Moon,
+  ArrowRight,
 } from 'lucide-react';
 import Button from '@/components/common/Button';
 import { LoadingSkeleton } from '@/components/common/LoadingSpinner';

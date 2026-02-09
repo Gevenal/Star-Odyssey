@@ -50,21 +50,21 @@ export const useUIStore = create<UIStore>((set) => ({
 
   closeModal: () => set({ activeModal: { type: null } }),
 
-  toggleInventory: () => set((state) => ({ showInventory: !state.showInventory })),
+  toggleInventory: () => set((state: UIStore) => ({ showInventory: !state.showInventory })),
 
-  toggleNPCPanel: () => set((state) => ({ showNPCPanel: !state.showNPCPanel })),
+  toggleNPCPanel: () => set((state: UIStore) => ({ showNPCPanel: !state.showNPCPanel })),
 
-  toggleShipSystems: () => set((state) => ({ showShipSystems: !state.showShipSystems })),
+  toggleShipSystems: () => set((state: UIStore) => ({ showShipSystems: !state.showShipSystems })),
 
-  toggleOracleTerminal: () => set((state) => ({ showOracleTerminal: !state.showOracleTerminal })),
+  toggleOracleTerminal: () => set((state: UIStore) => ({ showOracleTerminal: !state.showOracleTerminal })),
 
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSidebar: () => set((state: UIStore) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-  setTextSpeed: (speed) => set({ textSpeed: speed }),
+  setTextSpeed: (speed: 'slow' | 'medium' | 'fast' | 'instant') => set({ textSpeed: speed }),
 
-  setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
+  setSoundEnabled: (enabled: boolean | boolean | boolean) => set({ soundEnabled: enabled }),
 
-  setMusicVolume: (volume) => set({ musicVolume: volume }),
+  setMusicVolume: (volume: number | number | number) => set({ musicVolume: volume }),
 
-  setSfxVolume: (volume) => set({ sfxVolume: volume }),
+  setSfxVolume: (volume: number | number | number) => set({ sfxVolume: volume }),
 }));

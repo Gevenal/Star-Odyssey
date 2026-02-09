@@ -1,11 +1,10 @@
 import React from 'react';
 import clsx from 'clsx';
 import {
-  Wind,       // Oxygen
+  Droplet,       // Oxygen
   Zap,        // Power
-  Fuel,       // Fuel
   Heart,      // Medical
-  Utensils,   // Food
+  Apple,   // Food
   Wrench,     // Repair
   AlertTriangle,
 } from 'lucide-react';
