@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { clsx } from 'clsx';
+import clsx from 'clsx';
 import { Users, Filter } from 'lucide-react';
 import { NPCState } from '@/types/game';
 import NPCCard from './NPCCard';

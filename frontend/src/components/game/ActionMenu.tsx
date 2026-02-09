@@ -6,10 +6,13 @@ import {
   Users,
   Search,
   Zap,
-  Moon,
-  ArrowRight,
+  Wrench,
+  Heart,
+  Brain,
+  MapPin,
+  Activity,
+  Filter,
 } from 'lucide-react';
-import Button from '@/components/common/Button';
 import { LoadingSkeleton } from '@/components/common/LoadingSpinner';
 
 // Import from API types (provided by Team Member A)
@@ -63,7 +66,7 @@ const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
     bgColor: 'bg-purple-500/10 hover:bg-purple-500/20',
   },
   movement: {
-    icon: <ChevronRight size={14} />,
+    icon: <MapPin size={14} />,
     color: 'text-sky-400',
     bgColor: 'bg-sky-500/10 hover:bg-sky-500/20',
   },
@@ -73,19 +76,19 @@ const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
     bgColor: 'bg-cyan-500/10 hover:bg-cyan-500/20',
   },
   rest_recovery: {
-    icon: <Coffee size={14} />,
+    icon: <Activity size={14} />,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/10 hover:bg-blue-500/20',
   },
   freeform: {
-    icon: <ChevronRight size={14} />,
+    icon: <Filter size={14} />,
     color: 'text-gray-300',
     bgColor: 'bg-gray-500/10 hover:bg-gray-500/20',
   },
 };
 
 const DEFAULT_CONFIG: CategoryConfig = {
-  icon: <ChevronRight size={14} />,
+  icon: <Filter size={14} />,
   color: 'text-gray-400',
   bgColor: 'bg-gray-500/10 hover:bg-gray-500/20',
 };
