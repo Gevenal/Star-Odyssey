@@ -15,6 +15,7 @@ interface ModalProps {
   closeOnEscape?: boolean;
   footer?: React.ReactNode;
   className?: string;
+  maxWidth?: string;
 }
 
 const sizeStyles = {

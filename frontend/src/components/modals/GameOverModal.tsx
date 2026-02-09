@@ -22,7 +22,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   // TODO: Add ending artwork/image
 
   return (
-    <Modal isOpen={isOpen} onClose={() => {}} title={endingTitle} maxWidth="xl">
+    <Modal isOpen={isOpen} onClose={() => {}} title={endingTitle} size="xl">
       <div className="space-y-6">
         <div className="text-gray-300 leading-relaxed whitespace-pre-wrap">
           {endingNarration}

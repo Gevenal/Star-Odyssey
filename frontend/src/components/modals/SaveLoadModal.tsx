@@ -49,7 +49,7 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={mode === 'save' ? 'Save Game' : 'Load Game'}
-      maxWidth="lg"
+      size="lg"
     >
       <div className="space-y-4">
         <div className="space-y-2 max-h-96 overflow-y-auto">

@@ -20,7 +20,7 @@ export const NPCDetailModal: React.FC<NPCDetailModalProps> = ({
   // TODO: Add interaction history
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={npc.name} maxWidth="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={npc.name} size="lg">
       <div className="space-y-4">
         <div>
           <h4 className="text-gray-400 text-sm uppercase mb-1">Role</h4>

@@ -29,7 +29,7 @@ export const ChoiceModal: React.FC<ChoiceModalProps> = ({
   // TODO: Add keyboard shortcuts (1, 2, 3...)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="lg">
       {description && (
         <p className="text-gray-300 mb-4">{description}</p>
       )}
